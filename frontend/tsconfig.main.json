@@ -1,8 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "outDir": "dist/main",
-    "noEmit": false
-  },
-  "include": ["src/main", "src/preload"]
-}

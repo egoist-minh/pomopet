@@ -1,0 +1,358 @@
+'use client';
+
+import { useRef, useState, useEffect } from 'react';
+import FloatingPet, { Emotion, SessionState } from './FloatingPet';
+import MainWindow from './MainWindow';
+import SetupModal from './SetupModal';
+import { motion, AnimatePresence } from 'motion/react';
+import { Sparkles, MonitorSmartphone } from 'lucide-react';
+
+export interface Task {
+  id: string;
+  name: string;
+  priority: 'high' | 'medium' | 'low';
+  deadline?: string;
+  completed: boolean;
+}
+
+export default function DesktopEnvironment() {
+  const constraintsRef = useRef<HTMLDivElement>(null);
+  const [petName, setPetName] = useState<string | null>(null);
+  const [emotion, setEmotion] = useState<Emotion>('idle');
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isMainWindowOpen, setIsMainWindowOpen] = useState(false);
+  const [isQuickChatOpen, setIsQuickChatOpen] = useState(false);
+  const [speechText, setSpeechText] = useState<string | null>(null);
+  const [isDesktopMode, setIsDesktopMode] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chat' | 'tasks' | 'stats' | 'settings'>('chat');
+  const [messages, setMessages] = useState<{role: 'user' | 'pet', text: string}[]>([]);
+  const [currentTime, setCurrentTime] = useState<string>('');
+
+  // Task & Session State
+  const [tasks, setTasks] = useState<Task[]>([
+    { id: '1', name: 'Design PomoPet MVP', priority: 'high', completed: false },
+    { id: '2', name: 'Write backend service', priority: 'medium', completed: false }
+  ]);
+  const [sessionState, setSessionState] = useState<SessionState>('idle');
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [currentTask, setCurrentTask] = useState<Task | null>(null);
+  const [focusHoursToday, setFocusHoursToday] = useState(0);
+  const [focusHoursWeek, setFocusHoursWeek] = useState(12.5); // Mock data for week
+  const [sessionsCompleted, setSessionsCompleted] = useState(0);
+  const [distractionChain, setDistractionChain] = useState(0);
+  
+  const initialDistractionData = Array.from({ length: 12 }, (_, i) => ({
+    time: `${(i * 2).toString().padStart(2, '0')}:00`,
+    distractions: 0
+  }));
+  const [distractionData, setDistractionData] = useState<{time: string, distractions: number}[]>(initialDistractionData);
+  
+  const originalDurationRef = useRef<number>(0);
+
+  useEffect(() => {
+    // Check local storage for existing pet name
+    const storedName = localStorage.getItem('petName');
+    if (storedName) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPetName(storedName);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMessages([{ role: 'pet', text: `Welcome back! I'm ${storedName}.` }]);
+    }
+    
+    // Update time
+    setCurrentTime(new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+    const interval = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleSetupComplete = (name: string) => {
+    setPetName(name);
+    localStorage.setItem('petName', name);
+    setMessages([{ role: 'pet', text: `Hello! I am ${name}, your new desktop companion.` }]);
+    setEmotion('happy');
+    setIsSpeaking(true);
+    setSpeechText(`BOOT SEQUENCE COMPLETE. GREETINGS, I AM ${name}.`);
+    
+    setTimeout(() => {
+      setEmotion('idle');
+      setIsSpeaking(false);
+      setSpeechText(null);
+    }, 4000);
+  };
+
+  const handleSendMessage = (msg: string) => {
+    setMessages(prev => [...prev, { role: 'user', text: msg }]);
+    
+    // Simulate thinking and responding
+    setSpeechText(null);
+    setEmotion('thinking');
+    
+    setTimeout(() => {
+       let reply = "That's interesting!";
+       let nextEmotion: Emotion = 'happy';
+       
+       const lowerMsg = msg.toLowerCase();
+       if (lowerMsg.includes('hello') || lowerMsg.includes('hi')) {
+          reply = `Hi there! It's me, ${petName}!`;
+          nextEmotion = 'happy';
+       } else if (lowerMsg.includes('bad') || lowerMsg.includes('sad')) {
+          reply = "Oh no, I'm sorry to hear that. 😢";
+          nextEmotion = 'sad';
+       } else if (lowerMsg.includes('mad') || lowerMsg.includes('angry') || lowerMsg.includes('hate')) {
+          reply = "Whoa, calm down!";
+          nextEmotion = 'worried';
+       } else if (lowerMsg.includes('joke')) {
+          reply = "Why did the computer show up at work late? It had a hard drive!";
+          nextEmotion = 'happy';
+       } else if (lowerMsg.includes('yay') || lowerMsg.includes('win') || lowerMsg.includes('awesome')) {
+          reply = "Yay! That's awesome!";
+          nextEmotion = 'excited';
+       } else if (lowerMsg.includes('boo') || lowerMsg.includes('ghost')) {
+          reply = "Ah! You scared me!";
+          nextEmotion = 'worried';
+       }
+
+       setMessages(prev => [...prev, { role: 'pet', text: reply }]);
+       setEmotion(nextEmotion);
+       setIsSpeaking(true);
+       setSpeechText(reply.toUpperCase());
+       
+       // Stop speaking animation based on message length approx
+       setTimeout(() => setIsSpeaking(false), Math.min(reply.length * 50, 2500));
+       setTimeout(() => setSpeechText(null), Math.max(Math.min(reply.length * 100, 5000), 3000));
+
+       // Return to idle after a while
+       setTimeout(() => {
+          setEmotion(prev => prev === nextEmotion ? 'idle' : prev);
+       }, 2000);
+    }, 2000);
+  };
+
+  // Timer Effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (sessionState === 'running' || sessionState === 'break') {
+      interval = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            handleSessionComplete();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [sessionState]);
+
+  const handleSessionComplete = () => {
+    if (sessionState === 'running') {
+      setEmotion('excited');
+      setSpeechText('SESSION COMPLETE! GREAT JOB!');
+      setSessionsCompleted(prev => prev + 1);
+      setFocusHoursToday(prev => prev + (originalDurationRef.current / 3600)); // Convert seconds to hours
+      setFocusHoursWeek(prev => prev + (originalDurationRef.current / 3600));
+      
+      setTimeout(() => {
+        setSessionState('break');
+        setTimeLeft(5 * 60); // 5 min break
+        setEmotion('sleepy');
+        setSpeechText('TIME FOR A QUICK BREAK...');
+        setTimeout(() => setSpeechText(null), 4000);
+      }, 4000);
+    } else if (sessionState === 'break') {
+      setEmotion('idle');
+      setSpeechText('BREAK OVER! READY FOR NEXT TASK?');
+      setSessionState('idle');
+      setCurrentTask(null);
+      setTimeout(() => setSpeechText(null), 4000);
+    }
+  };
+
+  const handleStartSession = (task: Task, durationMinutes: number) => {
+    setCurrentTask(task);
+    const durationSeconds = durationMinutes * 60;
+    setTimeLeft(durationSeconds);
+    originalDurationRef.current = durationSeconds;
+    setSessionState('running');
+    setEmotion('happy');
+    setSpeechText(`FOCUSING ON: ${task.name.toUpperCase()}`);
+    setIsMainWindowOpen(false); // Close window to focus
+    setTimeout(() => setSpeechText(null), 4000);
+  };
+
+  const handlePauseSession = () => {
+    setSessionState('paused');
+    setEmotion('idle');
+  };
+
+  const handleResumeSession = () => {
+    setSessionState('running');
+    setEmotion('happy');
+  };
+
+  const handleCancelSession = () => {
+    setSessionState('idle');
+    setCurrentTask(null);
+    setTimeLeft(0);
+    setEmotion('sad');
+    setSpeechText('SESSION CANCELLED...');
+    setDistractionChain(0); // Reset distraction on cancel
+    setTimeout(() => {
+      setEmotion('idle');
+      setSpeechText(null);
+    }, 4000);
+  };
+
+  const handleSimulateDistraction = () => {
+    if (sessionState === 'running') {
+      const currentHour = new Date().getHours();
+      const binIndex = Math.floor(currentHour / 2);
+      setDistractionData(prev => {
+        const newData = [...prev];
+        newData[binIndex] = { ...newData[binIndex], distractions: newData[binIndex].distractions + 1 };
+        return newData;
+      });
+
+      setDistractionChain(prev => prev + 1);
+      setTimeLeft(prev => prev + 300); // add 5 minutes penalty
+      setEmotion('angry');
+      setSpeechText('HEY! GET BACK TO WORK! (+5 MIN PENALTY)');
+      setTimeout(() => {
+        if (sessionState === 'running') {
+          setEmotion('happy');
+          setSpeechText(null);
+        }
+      }, 5000);
+    } else {
+      setEmotion('idle');
+      setSpeechText('NO SESSION TO DISTRACT FROM!');
+      setTimeout(() => setSpeechText(null), 3000);
+    }
+  };
+
+  return (
+    <div 
+      ref={constraintsRef}
+      className={`relative w-full h-screen overflow-hidden font-sans selection:bg-cyan-400/50 ${isDesktopMode ? 'bg-transparent' : 'bg-white/10'}`}
+      style={isDesktopMode ? {} : {
+         backgroundImage: 'radial-gradient(#000 1px, transparent 0)',
+         backgroundSize: '20px 20px',
+         backgroundColor: '#f3f4f6'
+      }}
+    >
+      <AnimatePresence>
+        {!petName && (
+           <SetupModal onComplete={handleSetupComplete} />
+        )}
+      </AnimatePresence>
+
+      {/* Mock Top Menu Bar (Retro style) - Hidden in Desktop Mode */}
+      {!isDesktopMode && (
+        <div className="w-full h-8 bg-white border-b-[3px] border-black flex items-center px-4 text-black text-xs font-bold font-mono justify-between z-10 relative pointer-events-none shadow-[0_2px_0_rgba(0,0,0,1)] uppercase">
+           <div className="flex items-center gap-6">
+              <span className="font-space tracking-widest pl-1 bg-black text-white px-2 py-0.5">EMO.OS</span>
+              <div className="hidden sm:flex gap-4">
+                 <span>File</span>
+                 <span>Edit</span>
+                 <span>View</span>
+                 <span>Window</span>
+              </div>
+           </div>
+           <div className="flex items-center gap-4 text-black pointer-events-auto">
+              {petName && (
+                <button 
+                  onClick={() => setIsMainWindowOpen(!isMainWindowOpen)}
+                  className={`flex items-center gap-1.5 px-2 py-0.5 border-2 border-transparent hover:border-black transition-colors ${isMainWindowOpen ? 'bg-cyan-400 border-black' : ''}`}
+                  title="Open Control Center"
+                >
+                  <MonitorSmartphone className="w-3.5 h-3.5" strokeWidth={3} />
+                  <span className="font-space">{petName}</span>
+                </button>
+              )}
+              <span className="tabular-nums border-l-[3px] border-black pl-4">{currentTime || '--:--'}</span>
+           </div>
+        </div>
+      )}
+
+      {petName && (
+         <>
+            {/* System Tray Floating Hint - also hidden in Desktop Mode if we just want a clean pet */}
+             <AnimatePresence>
+               {!isMainWindowOpen && !isDesktopMode && (
+                 <motion.button 
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   exit={{ opacity: 0, scale: 0.9 }}
+                   onClick={() => setIsMainWindowOpen(true)}
+                   className="absolute bottom-8 right-8 bg-white border-[4px] border-black shadow-[8px_8px_0_#000] p-3 flex items-center gap-4 group hover:bg-cyan-50 transition-colors z-20 active:translate-y-1 active:translate-x-1 active:shadow-[4px_4px_0_#000]"
+                 >
+                   <div className="w-10 h-10 bg-cyan-400 flex items-center justify-center border-[3px] border-black group-hover:scale-105 transition-transform">
+                     <Sparkles className="w-5 h-5 text-black" strokeWidth={3} />
+                   </div>
+                   <div className="text-left">
+                     <div className="text-black font-mono font-bold text-sm uppercase">Open OS</div>
+                     <div className="text-gray-600 text-xs font-mono font-bold uppercase mt-0.5">Control Center MINIMIZED</div>
+                   </div>
+                 </motion.button>
+               )}
+             </AnimatePresence>
+
+            {/* Floating Pet Widget - Always on top layer */}
+            <FloatingPet 
+               emotion={emotion} 
+               constraintsRef={constraintsRef} 
+               isSpeaking={isSpeaking}
+               speechText={speechText}
+               isQuickChatOpen={isQuickChatOpen}
+               onQuickChatClose={() => setIsQuickChatOpen(false)}
+               onSendMessage={handleSendMessage}
+               onChatClick={() => {
+                 setIsQuickChatOpen(true);
+               }}
+               onTasksClick={() => {
+                 setIsMainWindowOpen(true);
+                 setActiveTab('tasks');
+               }}
+               sessionState={sessionState}
+               timeLeft={timeLeft}
+               currentTaskName={currentTask?.name}
+               onPauseSession={handlePauseSession}
+               onResumeSession={handleResumeSession}
+               onCancelSession={handleCancelSession}
+            />
+
+            {/* Main Interactive Window */}
+            <MainWindow 
+               isOpen={isMainWindowOpen}
+               onClose={() => setIsMainWindowOpen(false)}
+               onMinimize={() => setIsMainWindowOpen(false)}
+               petName={petName}
+               setPetName={(n) => { setPetName(n); localStorage.setItem('petName', n); }}
+               emotion={emotion}
+               setEmotion={setEmotion}
+               chatMessages={messages}
+               onSendMessage={handleSendMessage}
+               activeTab={activeTab}
+               setActiveTab={setActiveTab}
+               isDesktopMode={isDesktopMode}
+               setIsDesktopMode={setIsDesktopMode}
+               tasks={tasks}
+               setTasks={setTasks}
+               focusHoursToday={focusHoursToday}
+               focusHoursWeek={focusHoursWeek}
+               sessionsCompleted={sessionsCompleted}
+               onStartSession={handleStartSession}
+               sessionState={sessionState}
+               distractionChain={distractionChain}
+               distractionData={distractionData}
+               onSimulateDistraction={handleSimulateDistraction}
+            />
+         </>
+      )}
+    </div>
+  );
+}

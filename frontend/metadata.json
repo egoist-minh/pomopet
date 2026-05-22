@@ -1,0 +1,6 @@
+{
+  "name": "Floating AI Pet",
+  "description": "An expressive, minimalist AI desktop pet with digital eyes and drag interaction, mimicking a floating desktop assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
