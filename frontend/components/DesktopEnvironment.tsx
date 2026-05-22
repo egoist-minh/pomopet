@@ -15,6 +15,20 @@ export interface Task {
   completed: boolean;
 }
 
+function Clock() {
+  const [time, setTime] = useState<string>('');
+  
+  useEffect(() => {
+    setTime(new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+    const interval = setInterval(() => {
+      setTime(new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  return <span className="tabular-nums border-l-[3px] border-black pl-4">{time || '--:--'}</span>;
+}
+
 export default function DesktopEnvironment() {
   const constraintsRef = useRef<HTMLDivElement>(null);
   const [petName, setPetName] = useState<string | null>(null);
@@ -26,7 +40,6 @@ export default function DesktopEnvironment() {
   const [isDesktopMode, setIsDesktopMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'tasks' | 'stats' | 'settings'>('chat');
   const [messages, setMessages] = useState<{role: 'user' | 'pet', text: string}[]>([]);
-  const [currentTime, setCurrentTime] = useState<string>('');
 
   // Task & Session State
   const [tasks, setTasks] = useState<Task[]>([
@@ -58,13 +71,6 @@ export default function DesktopEnvironment() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setMessages([{ role: 'pet', text: `Welcome back! I'm ${storedName}.` }]);
     }
-    
-    // Update time
-    setCurrentTime(new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-    const interval = setInterval(() => {
-      setCurrentTime(new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-    }, 1000);
-    return () => clearInterval(interval);
   }, []);
 
   const handleSetupComplete = (name: string) => {
@@ -273,7 +279,7 @@ export default function DesktopEnvironment() {
                   <span className="font-space">{petName}</span>
                 </button>
               )}
-              <span className="tabular-nums border-l-[3px] border-black pl-4">{currentTime || '--:--'}</span>
+              <Clock />
            </div>
         </div>
       )}

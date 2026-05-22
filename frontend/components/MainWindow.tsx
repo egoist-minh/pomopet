@@ -5,7 +5,15 @@ import { X, Minus, MessageSquare, CheckSquare, BarChart2, Settings, Send, Play, 
 import { useState, useRef, useEffect } from 'react';
 import { Emotion, SessionState } from './FloatingPet';
 import { Task } from './DesktopEnvironment';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from 'recharts';
+import dynamic from 'next/dynamic';
+
+const AreaChart = dynamic(() => import('recharts').then((mod) => mod.AreaChart), { ssr: false });
+const Area = dynamic(() => import('recharts').then((mod) => mod.Area), { ssr: false });
+const XAxis = dynamic(() => import('recharts').then((mod) => mod.XAxis), { ssr: false });
+const YAxis = dynamic(() => import('recharts').then((mod) => mod.YAxis), { ssr: false });
+const CartesianGrid = dynamic(() => import('recharts').then((mod) => mod.CartesianGrid), { ssr: false });
+const ResponsiveContainer = dynamic(() => import('recharts').then((mod) => mod.ResponsiveContainer), { ssr: false });
+const Tooltip = dynamic(() => import('recharts').then((mod) => mod.Tooltip), { ssr: false });
 
 interface MainWindowProps {
   isOpen: boolean;
