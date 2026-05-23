@@ -37,7 +37,7 @@ export default function DesktopEnvironment() {
   const [isMainWindowOpen, setIsMainWindowOpen] = useState(false);
   const [isQuickChatOpen, setIsQuickChatOpen] = useState(false);
   const [speechText, setSpeechText] = useState<string | null>(null);
-  const [isDesktopMode, setIsDesktopMode] = useState(false);
+  const [isDesktopMode, setIsDesktopMode] = useState(true);
   const [activeTab, setActiveTab] = useState<'chat' | 'tasks' | 'stats' | 'settings'>('chat');
   const [messages, setMessages] = useState<{role: 'user' | 'pet', text: string}[]>([]);
 

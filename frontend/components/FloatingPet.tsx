@@ -1,8 +1,16 @@
 'use client';
 
 import { motion, Variants, AnimatePresence } from 'motion/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Send, X } from 'lucide-react';
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      setIgnoreMouseEvents: (ignore: boolean, options?: { forward: boolean }) => void;
+    };
+  }
+}
 
 export type Emotion = 'idle' | 'happy' | 'excited' | 'worried' | 'sad' | 'sleepy' | 'thinking' | 'angry' | 'hurt';
 export type SessionState = 'idle' | 'running' | 'paused' | 'break';
@@ -46,6 +54,18 @@ export default function FloatingPet({
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [chatInput, setChatInput] = useState('');
+
+  const handleMouseEnter = useCallback(() => {
+    if (window.electronAPI) {
+      window.electronAPI.setIgnoreMouseEvents(false);
+    }
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (window.electronAPI && !isQuickChatOpen) {
+      window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
+    }
+  }, [isQuickChatOpen]);
 
   useEffect(() => {
     // Random blink logic
@@ -177,10 +197,11 @@ export default function FloatingPet({
       onDragEnd={() => setIsDragging(false)}
       whileDrag={{ scale: 1.05, cursor: "grabbing" }}
       className="absolute z-40 flex flex-col items-center top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2"
+      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       initial={{ scale: 0, opacity: 0 }}
       animate={{ scale: 1, opacity: 1, transition: { type: "spring", bounce: 0.5 } }}
-      onHoverStart={() => setIsHovered(true)}
-      onHoverEnd={() => setIsHovered(false)}
+      onHoverStart={() => { setIsHovered(true); handleMouseEnter(); }}
+      onHoverEnd={() => { setIsHovered(false); handleMouseLeave(); }}
     >
       {/* Session Action Menu (Shows when running/paused) */}
       <AnimatePresence>
