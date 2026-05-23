@@ -70,6 +70,49 @@ export default function FloatingPet({
     return () => clearInterval(blinkInterval);
   }, [emotion]);
 
+  useEffect(() => {
+    let soundInterval: NodeJS.Timeout;
+    if (isSpeaking) {
+      soundInterval = setInterval(() => {
+        try {
+          const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+          if (!AudioContext) return;
+          const ctx = new AudioContext();
+          const osc1 = ctx.createOscillator();
+          const osc2 = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+
+          osc1.type = 'square';
+          osc2.type = 'sawtooth';
+          
+          const freqs = [440, 554, 659, 880, 1108, 1318, 1760];
+          const baseFreq = freqs[Math.floor(Math.random() * freqs.length)];
+          
+          osc1.frequency.setValueAtTime(baseFreq, ctx.currentTime); 
+          osc1.frequency.exponentialRampToValueAtTime(baseFreq * 0.5, ctx.currentTime + 0.06);
+          
+          osc2.frequency.setValueAtTime(baseFreq * 1.5, ctx.currentTime); 
+          osc2.frequency.exponentialRampToValueAtTime(baseFreq * 0.75, ctx.currentTime + 0.06);
+          
+          gainNode.gain.setValueAtTime(0.015, ctx.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+
+          osc1.connect(gainNode);
+          osc2.connect(gainNode);
+          gainNode.connect(ctx.destination);
+
+          osc1.start();
+          osc2.start();
+          osc1.stop(ctx.currentTime + 0.06);
+          osc2.stop(ctx.currentTime + 0.06);
+        } catch(e) {}
+      }, 70);
+    }
+    return () => {
+      if (soundInterval) clearInterval(soundInterval);
+    };
+  }, [isSpeaking]);
+
   const getEyeStyle = (side: 'left' | 'right', currentEmotion: Emotion, blinking: boolean) => {
     const base = { backgroundColor: "#22d3ee", borderWidth: 0, borderColor: "transparent", borderStyle: "solid" as any };
     if (blinking) {
@@ -101,37 +144,6 @@ export default function FloatingPet({
         }
       default:
         return { ...base, height: 48, width: 48, borderRadius: "12px", rotate: 0, y: 0 };
-    }
-  };
-
-  // Dynamic mouth styling
-  const getMouthStyle = (currentEmotion: Emotion, speaking: boolean) => {
-    const base = { backgroundColor: "#22d3ee", borderWidth: 0, borderColor: "transparent", borderStyle: "solid" as any, x: 0, rotate: 0 };
-    if (speaking) {
-      return { ...base, height: 20, width: 28, borderRadius: "8px 8px 24px 24px", y: 14, opacity: 1, scaleY: [1, 0.4, 1, 0.6, 1], transition: { repeat: Infinity, duration: 0.4 } };
-    }
-
-    switch(currentEmotion) {
-      case 'idle':
-        return { ...base, height: 3, width: 12, borderRadius: "3px", y: 16, opacity: 0.3, scaleY: 1 };
-      case 'happy':
-        return { ...base, height: 12, width: 24, borderRadius: "3px 3px 18px 18px", y: 10, opacity: 1, scaleY: 1 };
-      case 'excited':
-        return { ...base, height: 18, width: 28, borderRadius: "3px 3px 24px 24px", y: 6, opacity: 1, scaleY: 1 };
-      case 'worried':
-        return { ...base, height: 4, width: 18, borderRadius: "3px", y: 18, opacity: 0.6, scaleY: 1 };
-      case 'sad':
-        return { ...base, height: 8, width: 18, borderRadius: "16px 16px 3px 3px", y: 20, opacity: 0.8, scaleY: 1 };
-      case 'angry':
-        return { ...base, height: 3, width: 22, borderRadius: "3px", y: 10, opacity: 0.9, scaleY: 1, rotate: -4 };
-      case 'sleepy':
-        return { ...base, height: 3, width: 8, borderRadius: "3px", y: 16, opacity: 0.4, scaleY: 1 };
-      case 'thinking':
-        return { ...base, height: 4, width: 10, borderRadius: "3px", y: 16, x: 10, opacity: 0.6, scaleY: 1 };
-      case 'hurt':
-        return { ...base, backgroundColor: "transparent", borderTopWidth: 6, borderLeftWidth: 6, borderColor: "#22d3ee", rotate: 45, height: 16, width: 16, borderRadius: "4px", y: 6, opacity: 1, scaleY: 1 };
-      default:
-        return { ...base, height: 3, width: 12, borderRadius: "3px", y: 16, opacity: 0.3, scaleY: 1 };
     }
   };
 
@@ -334,13 +346,6 @@ export default function FloatingPet({
                  className="bg-cyan-400 absolute ml-[-50px] mt-[-20px] shadow-[0_0_10px_rgba(34,211,238,0.5)]"
                />
                
-               {/* Mouth */}
-               <motion.div
-                  animate={getMouthStyle(displayEmotion, isSpeaking)}
-                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                  className="bg-cyan-400 absolute bottom-8 shadow-[0_0_10px_rgba(34,211,238,0.5)]"
-               />
-
                {/* Right Eye */}
                <motion.div
                  animate={getEyeStyle('right', displayEmotion, isBlinking)}
@@ -353,9 +358,10 @@ export default function FloatingPet({
         {/* Physical Details (Speaker / Buttons) */}
         <div className="w-full flex justify-between items-end pt-3 pb-1 px-1">
             {/* Speaker grills */}
-            <div className="flex flex-col gap-1">
-                <div className="w-6 h-1 bg-black rounded-full" />
-                <div className="w-4 h-1 bg-black rounded-full" />
+            <div className="flex flex-col gap-1 items-start">
+                <motion.div animate={isSpeaking ? { scaleX: [1, 1.4, 0.8, 1.2, 1], transition: { repeat: Infinity, duration: 0.3 } } : { scaleX: 1 }} className="w-6 h-1 bg-black rounded-full origin-left" />
+                <motion.div animate={isSpeaking ? { scaleX: [1, 0.5, 1.3, 0.7, 1], transition: { repeat: Infinity, duration: 0.4 } } : { scaleX: 1 }} className="w-4 h-1 bg-black rounded-full origin-left" />
+                <motion.div animate={isSpeaking ? { scaleX: [1, 1.6, 0.9, 1.3, 1], transition: { repeat: Infinity, duration: 0.35 } } : { scaleX: 1 }} className="w-5 h-1 bg-black rounded-full origin-left" />
             </div>
             {/* LED */}
             <div className={`w-2.5 h-2.5 bg-cyan-400 border-[2px] border-black rounded-full ${isSpeaking ? 'animate-pulse' : ''}`} />
