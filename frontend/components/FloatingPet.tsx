@@ -1,16 +1,8 @@
 'use client';
 
 import { motion, Variants, AnimatePresence } from 'motion/react';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Send, X } from 'lucide-react';
-
-declare global {
-  interface Window {
-    electronAPI?: {
-      setIgnoreMouseEvents: (ignore: boolean, options?: { forward: boolean }) => void;
-    };
-  }
-}
 
 export type Emotion = 'idle' | 'happy' | 'excited' | 'worried' | 'sad' | 'sleepy' | 'thinking' | 'angry' | 'hurt';
 export type SessionState = 'idle' | 'running' | 'paused' | 'break';
@@ -54,18 +46,6 @@ export default function FloatingPet({
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [chatInput, setChatInput] = useState('');
-
-  const handleMouseEnter = useCallback(() => {
-    if (window.electronAPI) {
-      window.electronAPI.setIgnoreMouseEvents(false);
-    }
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    if (window.electronAPI && !isQuickChatOpen) {
-      window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
-    }
-  }, [isQuickChatOpen]);
 
   useEffect(() => {
     // Random blink logic
@@ -193,15 +173,48 @@ export default function FloatingPet({
       dragConstraints={constraintsRef}
       dragElastic={0.1}
       dragMomentum={false}
-      onDragStart={() => setIsDragging(true)}
-      onDragEnd={() => setIsDragging(false)}
+      onDragStart={() => {
+        setIsDragging(true);
+        if (typeof window !== 'undefined') {
+          const win = window as any;
+          if (win.electron && win.electron.setIgnoreMouseEvents) win.electron.setIgnoreMouseEvents(false);
+          else if (win.ipcRenderer) win.ipcRenderer.send('set-ignore-mouse-events', false);
+        }
+      }}
+      onDragEnd={() => {
+        setIsDragging(false);
+        if (typeof window !== 'undefined') {
+          const win = window as any;
+          if (win.electron && win.electron.setIgnoreMouseEvents) win.electron.setIgnoreMouseEvents(true, { forward: true });
+          else if (win.ipcRenderer) win.ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
+        }
+      }}
       whileDrag={{ scale: 1.05, cursor: "grabbing" }}
       className="absolute z-40 flex flex-col items-center top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2"
-      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       initial={{ scale: 0, opacity: 0 }}
       animate={{ scale: 1, opacity: 1, transition: { type: "spring", bounce: 0.5 } }}
-      onHoverStart={() => { setIsHovered(true); handleMouseEnter(); }}
-      onHoverEnd={() => { setIsHovered(false); handleMouseLeave(); }}
+      onHoverStart={() => {
+        setIsHovered(true);
+        if (typeof window !== 'undefined') {
+          const win = window as any;
+          if (win.electron && win.electron.setIgnoreMouseEvents) {
+            win.electron.setIgnoreMouseEvents(false);
+          } else if (win.ipcRenderer) {
+            win.ipcRenderer.send('set-ignore-mouse-events', false);
+          }
+        }
+      }}
+      onHoverEnd={() => {
+        setIsHovered(false);
+        if (typeof window !== 'undefined') {
+          const win = window as any;
+          if (win.electron && win.electron.setIgnoreMouseEvents) {
+            win.electron.setIgnoreMouseEvents(true, { forward: true });
+          } else if (win.ipcRenderer) {
+            win.ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
+          }
+        }
+      }}
     >
       {/* Session Action Menu (Shows when running/paused) */}
       <AnimatePresence>

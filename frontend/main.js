@@ -14,7 +14,7 @@ let mainWindow = null;
 function createWindow() {
   // Lấy kích thước màn hình để phủ toàn bộ desktop
   const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
+  const { width, height } = primaryDisplay.bounds;
 
   mainWindow = new BrowserWindow({
     width: width,

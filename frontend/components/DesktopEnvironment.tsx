@@ -19,6 +19,7 @@ function Clock() {
   const [time, setTime] = useState<string>('');
   
   useEffect(() => {
+    // Only access DOM / Date on mount
     setTime(new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
     const interval = setInterval(() => {
       setTime(new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
@@ -37,7 +38,7 @@ export default function DesktopEnvironment() {
   const [isMainWindowOpen, setIsMainWindowOpen] = useState(false);
   const [isQuickChatOpen, setIsQuickChatOpen] = useState(false);
   const [speechText, setSpeechText] = useState<string | null>(null);
-  const [isDesktopMode, setIsDesktopMode] = useState(true);
+  const [isDesktopMode, setIsDesktopMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'tasks' | 'stats' | 'settings'>('chat');
   const [messages, setMessages] = useState<{role: 'user' | 'pet', text: string}[]>([]);
 
@@ -144,7 +145,8 @@ export default function DesktopEnvironment() {
         setTimeLeft(prev => {
           if (prev <= 1) {
             clearInterval(interval);
-            handleSessionComplete();
+            // Instead of dealing with stale closures or callbacks, 
+            // trigger the natural effect below.
             return 0;
           }
           return prev - 1;
@@ -153,6 +155,13 @@ export default function DesktopEnvironment() {
     }
     return () => clearInterval(interval);
   }, [sessionState]);
+
+  useEffect(() => {
+    if (timeLeft === 0 && sessionState !== 'idle') {
+       handleSessionComplete();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft, sessionState]);
 
   const handleSessionComplete = () => {
     if (sessionState === 'running') {
@@ -243,12 +252,7 @@ export default function DesktopEnvironment() {
   return (
     <div 
       ref={constraintsRef}
-      className={`relative w-full h-screen overflow-hidden font-sans selection:bg-cyan-400/50 ${isDesktopMode ? 'bg-transparent' : 'bg-white/10'}`}
-      style={isDesktopMode ? {} : {
-         backgroundImage: 'radial-gradient(#000 1px, transparent 0)',
-         backgroundSize: '20px 20px',
-         backgroundColor: '#f3f4f6'
-      }}
+      className={`relative w-full h-screen overflow-hidden font-sans selection:bg-cyan-400/50 bg-transparent`}
     >
       <AnimatePresence>
         {!petName && (
@@ -256,56 +260,10 @@ export default function DesktopEnvironment() {
         )}
       </AnimatePresence>
 
-      {/* Mock Top Menu Bar (Retro style) - Hidden in Desktop Mode */}
-      {!isDesktopMode && (
-        <div className="w-full h-8 bg-white border-b-[3px] border-black flex items-center px-4 text-black text-xs font-bold font-mono justify-between z-10 relative pointer-events-none shadow-[0_2px_0_rgba(0,0,0,1)] uppercase">
-           <div className="flex items-center gap-6">
-              <span className="font-space tracking-widest pl-1 bg-black text-white px-2 py-0.5">EMO.OS</span>
-              <div className="hidden sm:flex gap-4">
-                 <span>File</span>
-                 <span>Edit</span>
-                 <span>View</span>
-                 <span>Window</span>
-              </div>
-           </div>
-           <div className="flex items-center gap-4 text-black pointer-events-auto">
-              {petName && (
-                <button 
-                  onClick={() => setIsMainWindowOpen(!isMainWindowOpen)}
-                  className={`flex items-center gap-1.5 px-2 py-0.5 border-2 border-transparent hover:border-black transition-colors ${isMainWindowOpen ? 'bg-cyan-400 border-black' : ''}`}
-                  title="Open Control Center"
-                >
-                  <MonitorSmartphone className="w-3.5 h-3.5" strokeWidth={3} />
-                  <span className="font-space">{petName}</span>
-                </button>
-              )}
-              <Clock />
-           </div>
-        </div>
-      )}
-
       {petName && (
          <>
-            {/* System Tray Floating Hint - also hidden in Desktop Mode if we just want a clean pet */}
-             <AnimatePresence>
-               {!isMainWindowOpen && !isDesktopMode && (
-                 <motion.button 
-                   initial={{ opacity: 0, y: 20 }}
-                   animate={{ opacity: 1, y: 0 }}
-                   exit={{ opacity: 0, scale: 0.9 }}
-                   onClick={() => setIsMainWindowOpen(true)}
-                   className="absolute bottom-8 right-8 bg-white border-[4px] border-black shadow-[8px_8px_0_#000] p-3 flex items-center gap-4 group hover:bg-cyan-50 transition-colors z-20 active:translate-y-1 active:translate-x-1 active:shadow-[4px_4px_0_#000]"
-                 >
-                   <div className="w-10 h-10 bg-cyan-400 flex items-center justify-center border-[3px] border-black group-hover:scale-105 transition-transform">
-                     <Sparkles className="w-5 h-5 text-black" strokeWidth={3} />
-                   </div>
-                   <div className="text-left">
-                     <div className="text-black font-mono font-bold text-sm uppercase">Open OS</div>
-                     <div className="text-gray-600 text-xs font-mono font-bold uppercase mt-0.5">Control Center MINIMIZED</div>
-                   </div>
-                 </motion.button>
-               )}
-             </AnimatePresence>
+            {/* Always-on System Tray Floating Hint removed for clean desktop pet */}
+
 
             {/* Floating Pet Widget - Always on top layer */}
             <FloatingPet 

@@ -133,6 +133,40 @@ export default function MainWindow({
       dragControls={dragControls}
       dragListener={false}
       dragMomentum={false}
+      onDragStart={() => {
+        if (typeof window !== 'undefined') {
+          const win = window as any;
+          if (win.electron && win.electron.setIgnoreMouseEvents) win.electron.setIgnoreMouseEvents(false);
+          else if (win.ipcRenderer) win.ipcRenderer.send('set-ignore-mouse-events', false);
+        }
+      }}
+      onDragEnd={() => {
+        if (typeof window !== 'undefined') {
+          const win = window as any;
+          if (win.electron && win.electron.setIgnoreMouseEvents) win.electron.setIgnoreMouseEvents(true, { forward: true });
+          else if (win.ipcRenderer) win.ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
+        }
+      }}
+      onHoverStart={() => {
+        if (typeof window !== 'undefined') {
+          const win = window as any;
+          if (win.electron && win.electron.setIgnoreMouseEvents) {
+            win.electron.setIgnoreMouseEvents(false);
+          } else if (win.ipcRenderer) {
+            win.ipcRenderer.send('set-ignore-mouse-events', false);
+          }
+        }
+      }}
+      onHoverEnd={() => {
+        if (typeof window !== 'undefined') {
+          const win = window as any;
+          if (win.electron && win.electron.setIgnoreMouseEvents) {
+            win.electron.setIgnoreMouseEvents(true, { forward: true });
+          } else if (win.ipcRenderer) {
+            win.ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
+          }
+        }
+      }}
     >
       {/* Title Bar - Classic Mac OS style */}
       <div 
