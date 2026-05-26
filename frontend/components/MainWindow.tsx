@@ -15,6 +15,8 @@ const CartesianGrid = dynamic(() => import('recharts').then((mod) => mod.Cartesi
 const ResponsiveContainer = dynamic(() => import('recharts').then((mod) => mod.ResponsiveContainer), { ssr: false });
 const Tooltip = dynamic(() => import('recharts').then((mod) => mod.Tooltip), { ssr: false });
 
+export type AIService = 'openai' | 'claude' | 'ollama';
+
 interface MainWindowProps {
   isOpen: boolean;
   onClose: () => void;
@@ -39,6 +41,8 @@ interface MainWindowProps {
   distractionChain: number;
   distractionData: { time: string, distractions: number }[];
   onSimulateDistraction: () => void;
+  aiService: AIService;
+  setAiService: (service: AIService) => void;
 }
 
 export default function MainWindow({
@@ -65,6 +69,8 @@ export default function MainWindow({
   distractionChain,
   distractionData,
   onSimulateDistraction,
+  aiService,
+  setAiService,
 }: MainWindowProps) {
   const dragControls = useDragControls();
   const [chatInput, setChatInput] = useState('');
@@ -73,6 +79,20 @@ export default function MainWindow({
   const [newTaskName, setNewTaskName] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<'high' | 'medium' | 'low'>('medium');
   const [newTaskDeadline, setNewTaskDeadline] = useState('');
+
+  // API Keys
+  const [openaiApiKey, setOpenaiApiKey] = useState('');
+  const [claudeApiKey, setClaudeApiKey] = useState('');
+  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
+
+  useEffect(() => {
+    const storedOpenAI = localStorage.getItem('ai_openai_key');
+    const storedClaude = localStorage.getItem('ai_claude_key');
+    const storedOllama = localStorage.getItem('ai_ollama_url');
+    if (storedOpenAI) setOpenaiApiKey(storedOpenAI);
+    if (storedClaude) setClaudeApiKey(storedClaude);
+    if (storedOllama) setOllamaUrl(storedOllama);
+  }, []);
 
   const lastMessageRef = useRef<HTMLDivElement>(null);
 
@@ -465,24 +485,84 @@ export default function MainWindow({
                 </div>
                 
                 <div className="space-y-2">
-                  <label className="text-black text-xs font-mono font-bold uppercase flex items-center justify-between cursor-pointer border-[3px] border-black p-2 hover:bg-cyan-50" onClick={() => setIsDesktopMode(!isDesktopMode)}>
-                     <span>Pure Transparent Mode (For Electron/Real Desktop)</span>
-                     <div className={`w-8 h-4 border-2 border-black flex items-center px-0.5 ${isDesktopMode ? 'bg-cyan-400' : 'bg-gray-300'}`}>
-                        <motion.div animate={{ x: isDesktopMode ? 14 : 0 }} className="w-3 h-3 bg-white border-2 border-black shadow-sm" />
-                     </div>
-                  </label>
-                  <p className="text-[10px] text-gray-500 font-mono">Turn this on when exporting as an Electron app to remove the mock UI background.</p>
+                  <label className="text-black text-xs font-mono font-bold uppercase">AI Service</label>
+                  <div className="flex gap-2">
+                    {([
+                      { id: 'openai', label: 'OpenAI', icon: '⚡' },
+                      { id: 'claude', label: 'Claude', icon: '🧠' },
+                      { id: 'ollama', label: 'Ollama', icon: '🦙' },
+                    ] as const).map((service) => (
+                      <button
+                        key={service.id}
+                        onClick={() => {
+                          setAiService(service.id);
+                          localStorage.setItem('ai_service', service.id);
+                        }}
+                        className={`flex-1 py-3 px-2 text-xs font-mono font-bold uppercase border-[3px] border-black shadow-[2px_2px_0_#000] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] transition-all ${
+                          aiService === service.id
+                            ? 'bg-cyan-400 text-black'
+                            : 'bg-white text-black hover:bg-gray-100'
+                        }`}
+                      >
+                        {service.icon} {service.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                {aiService === 'openai' && (
+                  <div className="space-y-2">
+                    <label className="text-black text-xs font-mono font-bold uppercase">OpenAI API Key</label>
+                    <input
+                      type="password"
+                      value={openaiApiKey}
+                      onChange={(e) => setOpenaiApiKey(e.target.value)}
+                      onBlur={() => localStorage.setItem('ai_openai_key', openaiApiKey)}
+                      placeholder="sk-..."
+                      className="w-full bg-white border-[3px] border-black px-3 py-2 text-black font-mono font-bold text-sm outline-none focus:bg-cyan-50"
+                    />
+                    <p className="text-[10px] text-gray-500 font-mono">Get your API key from platform.openai.com</p>
+                  </div>
+                )}
+
+                {aiService === 'claude' && (
+                  <div className="space-y-2">
+                    <label className="text-black text-xs font-mono font-bold uppercase">Claude API Key</label>
+                    <input
+                      type="password"
+                      value={claudeApiKey}
+                      onChange={(e) => setClaudeApiKey(e.target.value)}
+                      onBlur={() => localStorage.setItem('ai_claude_key', claudeApiKey)}
+                      placeholder="sk-ant-..."
+                      className="w-full bg-white border-[3px] border-black px-3 py-2 text-black font-mono font-bold text-sm outline-none focus:bg-cyan-50"
+                    />
+                    <p className="text-[10px] text-gray-500 font-mono">Get your API key from console.anthropic.com</p>
+                  </div>
+                )}
+
+                {aiService === 'ollama' && (
+                  <div className="space-y-2">
+                    <label className="text-black text-xs font-mono font-bold uppercase">Ollama URL</label>
+                    <input
+                      type="text"
+                      value={ollamaUrl}
+                      onChange={(e) => setOllamaUrl(e.target.value)}
+                      onBlur={() => localStorage.setItem('ai_ollama_url', ollamaUrl)}
+                      placeholder="http://localhost:11434"
+                      className="w-full bg-white border-[3px] border-black px-3 py-2 text-black font-mono font-bold text-sm outline-none focus:bg-cyan-50"
+                    />
+                    <p className="text-[10px] text-gray-500 font-mono">URL where Ollama is running</p>
+                  </div>
+                )}
                 
                 <div className="space-y-2">
                   <label className="text-black text-xs font-mono font-bold uppercase block">Simulate Distraction</label>
                   <button 
                      onClick={onSimulateDistraction}
                      className="w-full bg-red-400 hover:bg-red-500 text-white font-mono font-bold border-[3px] border-black py-2 shadow-[2px_2px_0_#000] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none transition-all"
-                  >
-                     TEST DISTRACTION PENALTY (+5 MINS)
+                   >
+                      TEST DISTRACTION PENALTY (+5 MINS)
                   </button>
-                  <p className="text-[10px] text-gray-500 font-mono">Simulates app detection feature for Phase 2. Gets pet angry if session is running.</p>
                 </div>
               </div>
               <div className="space-y-2 flex-1">

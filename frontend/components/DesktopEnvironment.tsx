@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from 'react';
 import FloatingPet, { Emotion, SessionState } from './FloatingPet';
-import MainWindow from './MainWindow';
+import MainWindow, { AIService } from './MainWindow';
 import SetupModal from './SetupModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, MonitorSmartphone } from 'lucide-react';
@@ -41,6 +41,7 @@ export default function DesktopEnvironment() {
   const [isDesktopMode, setIsDesktopMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'tasks' | 'stats' | 'settings'>('chat');
   const [messages, setMessages] = useState<{role: 'user' | 'pet', text: string}[]>([]);
+  const [aiService, setAiService] = useState<AIService>('openai');
 
   // Task & Session State
   const [tasks, setTasks] = useState<Task[]>([
@@ -64,13 +65,17 @@ export default function DesktopEnvironment() {
   const originalDurationRef = useRef<number>(0);
 
   useEffect(() => {
-    // Check local storage for existing pet name
     const storedName = localStorage.getItem('petName');
     if (storedName) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPetName(storedName);
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setMessages([{ role: 'pet', text: `Welcome back! I'm ${storedName}.` }]);
+    }
+    const storedAIService = localStorage.getItem('ai_service') as AIService;
+    if (storedAIService) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAiService(storedAIService);
     }
   }, []);
 
@@ -291,30 +296,32 @@ export default function DesktopEnvironment() {
 
             {/* Main Interactive Window */}
             <MainWindow 
-               isOpen={isMainWindowOpen}
-               onClose={() => setIsMainWindowOpen(false)}
-               onMinimize={() => setIsMainWindowOpen(false)}
-               petName={petName}
-               setPetName={(n) => { setPetName(n); localStorage.setItem('petName', n); }}
-               emotion={emotion}
-               setEmotion={setEmotion}
-               chatMessages={messages}
-               onSendMessage={handleSendMessage}
-               activeTab={activeTab}
-               setActiveTab={setActiveTab}
-               isDesktopMode={isDesktopMode}
-               setIsDesktopMode={setIsDesktopMode}
-               tasks={tasks}
-               setTasks={setTasks}
-               focusHoursToday={focusHoursToday}
-               focusHoursWeek={focusHoursWeek}
-               sessionsCompleted={sessionsCompleted}
-               onStartSession={handleStartSession}
-               sessionState={sessionState}
-               distractionChain={distractionChain}
-               distractionData={distractionData}
-               onSimulateDistraction={handleSimulateDistraction}
-            />
+                isOpen={isMainWindowOpen}
+                onClose={() => setIsMainWindowOpen(false)}
+                onMinimize={() => setIsMainWindowOpen(false)}
+                petName={petName}
+                setPetName={(n) => { setPetName(n); localStorage.setItem('petName', n); }}
+                emotion={emotion}
+                setEmotion={setEmotion}
+                chatMessages={messages}
+                onSendMessage={handleSendMessage}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                isDesktopMode={isDesktopMode}
+                setIsDesktopMode={setIsDesktopMode}
+                tasks={tasks}
+                setTasks={setTasks}
+                focusHoursToday={focusHoursToday}
+                focusHoursWeek={focusHoursWeek}
+                sessionsCompleted={sessionsCompleted}
+                onStartSession={handleStartSession}
+                sessionState={sessionState}
+                distractionChain={distractionChain}
+                distractionData={distractionData}
+                onSimulateDistraction={handleSimulateDistraction}
+                aiService={aiService}
+                setAiService={setAiService}
+             />
          </>
       )}
     </div>
