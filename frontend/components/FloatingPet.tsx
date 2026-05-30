@@ -7,6 +7,65 @@ import { Send, X } from 'lucide-react';
 export type Emotion = 'idle' | 'happy' | 'excited' | 'worried' | 'sad' | 'sleepy' | 'thinking' | 'angry' | 'hurt';
 export type SessionState = 'idle' | 'running' | 'paused' | 'break';
 
+const SoundFX = {
+  playBlink: () => {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(1200, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(2000, ctx.currentTime + 0.03);
+      
+      gainNode.gain.setValueAtTime(0.015, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.03);
+
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.03);
+    } catch(e) {}
+  },
+  playEmotionChange: () => {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      osc1.type = 'sawtooth';
+      osc2.type = 'square';
+      
+      osc1.frequency.setValueAtTime(100, ctx.currentTime);
+      osc1.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.1);
+      osc1.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.25);
+      
+      osc2.frequency.setValueAtTime(150, ctx.currentTime);
+      osc2.frequency.exponentialRampToValueAtTime(450, ctx.currentTime + 0.1);
+      osc2.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.25);
+      
+      gainNode.gain.setValueAtTime(0, ctx.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.03, ctx.currentTime + 0.03);
+      gainNode.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
+
+      osc1.connect(gainNode);
+      osc2.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      osc1.start();
+      osc2.start();
+      osc1.stop(ctx.currentTime + 0.25);
+      osc2.stop(ctx.currentTime + 0.25);
+    } catch(e) {}
+  }
+};
+
 interface FloatingPetProps {
   emotion: Emotion;
   constraintsRef: React.RefObject<HTMLDivElement | null>;
@@ -54,12 +113,14 @@ export default function FloatingPet({
       if (emotion !== 'happy' && emotion !== 'excited' && emotion !== 'sad' && emotion !== 'sleepy') {
         if (Math.random() > 0.4) {
           setIsBlinking(true);
+          SoundFX.playBlink();
           setTimeout(() => {
             setIsBlinking(false);
             // Occasional double blink
             if (Math.random() > 0.7) {
               setTimeout(() => {
                 setIsBlinking(true);
+                SoundFX.playBlink();
                 setTimeout(() => setIsBlinking(false), 100);
               }, 150);
             }
@@ -68,6 +129,10 @@ export default function FloatingPet({
       }
     }, 4000);
     return () => clearInterval(blinkInterval);
+  }, [emotion]);
+
+  useEffect(() => {
+    SoundFX.playEmotionChange();
   }, [emotion]);
 
   useEffect(() => {
@@ -190,7 +255,7 @@ export default function FloatingPet({
         }
       }}
       whileDrag={{ scale: 1.05, cursor: "grabbing" }}
-      className="absolute z-40 flex flex-col items-center top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2"
+      className="absolute z-40 flex flex-col items-center bottom-4 right-4"
       initial={{ scale: 0, opacity: 0 }}
       animate={{ scale: 1, opacity: 1, transition: { type: "spring", bounce: 0.5 } }}
       onHoverStart={() => {
