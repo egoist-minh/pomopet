@@ -8,4 +8,19 @@ router = APIRouter()
 @router.get("/")
 async def get_statistics(db: AsyncSession = Depends(get_db)):
     service = StatisticsService(db)
+    return await service.get_all_statistics()
+
+@router.get("/daily")
+async def get_daily_statistics(db: AsyncSession = Depends(get_db)):
+    service = StatisticsService(db)
     return await service.get_daily_statistics()
+
+@router.get("/weekly")
+async def get_weekly_statistics(db: AsyncSession = Depends(get_db)):
+    service = StatisticsService(db)
+    return await service.get_weekly_statistics()
+
+@router.get("/distractions")
+async def get_distraction_statistics(db: AsyncSession = Depends(get_db)):
+    service = StatisticsService(db)
+    return await service.get_distraction_statistics()

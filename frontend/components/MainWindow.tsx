@@ -4,8 +4,9 @@ import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import { X, Minus, MessageSquare, CheckSquare, BarChart2, Settings, Send, Play, Trash2 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { Emotion, SessionState } from './FloatingPet';
-import { Task } from './DesktopEnvironment';
+import { Task } from '@/lib/api';
 import dynamic from 'next/dynamic';
+import { downloadLogs } from '@/lib/logger';
 
 const AreaChart = dynamic(() => import('recharts').then((mod) => mod.AreaChart), { ssr: false });
 const Area = dynamic(() => import('recharts').then((mod) => mod.Area), { ssr: false });
@@ -18,69 +19,75 @@ const Tooltip = dynamic(() => import('recharts').then((mod) => mod.Tooltip), { s
 export type AIService = 'openai' | 'claude' | 'ollama';
 
 interface MainWindowProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onMinimize: () => void;
-  petName: string;
-  setPetName: (name: string) => void;
-  emotion: Emotion;
-  setEmotion: (emotion: Emotion) => void;
-  chatMessages: { role: 'user' | 'pet'; text: string }[];
-  onSendMessage: (msg: string) => void;
-  activeTab: 'chat' | 'tasks' | 'stats' | 'settings';
-  setActiveTab: (tab: 'chat' | 'tasks' | 'stats' | 'settings') => void;
-  isDesktopMode: boolean;
-  setIsDesktopMode: (mode: boolean) => void;
-  tasks: Task[];
-  setTasks: (tasks: Task[]) => void;
-  focusHoursToday: number;
-  focusHoursWeek: number;
-  sessionsCompleted: number;
-  onStartSession: (task: Task, durationMinutes: number) => void;
-  sessionState: SessionState;
-  distractionChain: number;
-  distractionData: { time: string, distractions: number }[];
-  onSimulateDistraction: () => void;
-  aiService: AIService;
-  setAiService: (service: AIService) => void;
-}
+   isOpen: boolean;
+   onClose: () => void;
+   onMinimize: () => void;
+   petName: string;
+   setPetName: (name: string) => void;
+   emotion: Emotion;
+   setEmotion: (emotion: Emotion) => void;
+   chatMessages: { role: 'user' | 'pet'; text: string }[];
+   onSendMessage: (msg: string) => void;
+   activeTab: 'chat' | 'tasks' | 'stats' | 'settings';
+   setActiveTab: (tab: 'chat' | 'tasks' | 'stats' | 'settings') => void;
+   isDesktopMode: boolean;
+   setIsDesktopMode: (mode: boolean) => void;
+   tasks: Task[];
+   onAddTask: (name: string, priority: 'high' | 'medium' | 'low', deadline: string) => void;
+   onDeleteTask: (taskId: string) => void;
+   onToggleTask: (taskId: string) => void;
+   focusHoursToday: number;
+   focusHoursWeek: number;
+   sessionsCompleted: number;
+   onStartSession: (task: Task, durationMinutes: number) => void;
+   sessionState: SessionState;
+   distractionChain: number;
+   distractionData: { time: string, distractions: number }[];
+   onSimulateDistraction: () => void;
+    aiService: AIService;
+    setAiService: (service: AIService) => void;
+    apiError?: string | null;
+    backendConnected?: boolean;
+ }
 
 export default function MainWindow({
-  isOpen,
-  onClose,
-  onMinimize,
-  petName,
-  setPetName,
-  emotion,
-  setEmotion,
-  chatMessages,
-  onSendMessage,
-  activeTab,
-  setActiveTab,
-  isDesktopMode,
-  setIsDesktopMode,
-  tasks,
-  setTasks,
-  focusHoursToday,
-  focusHoursWeek,
-  sessionsCompleted,
-  onStartSession,
-  sessionState,
-  distractionChain,
-  distractionData,
-  onSimulateDistraction,
-  aiService,
-  setAiService,
-}: MainWindowProps) {
+   isOpen,
+   onClose,
+   onMinimize,
+   petName,
+   setPetName,
+   emotion,
+   setEmotion,
+   chatMessages,
+   onSendMessage,
+   activeTab,
+   setActiveTab,
+   isDesktopMode,
+   setIsDesktopMode,
+   tasks,
+   onAddTask,
+   onDeleteTask,
+   onToggleTask,
+   focusHoursToday,
+   focusHoursWeek,
+   sessionsCompleted,
+   onStartSession,
+   sessionState,
+   distractionChain,
+   distractionData,
+   onSimulateDistraction,
+    aiService,
+    setAiService,
+    apiError,
+    backendConnected = true,
+  }: MainWindowProps) {
   const dragControls = useDragControls();
   const [chatInput, setChatInput] = useState('');
   
-  // New Task Form States
   const [newTaskName, setNewTaskName] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<'high' | 'medium' | 'low'>('medium');
   const [newTaskDeadline, setNewTaskDeadline] = useState('');
 
-  // API Keys
   const [openaiApiKey, setOpenaiApiKey] = useState('');
   const [claudeApiKey, setClaudeApiKey] = useState('');
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
@@ -112,24 +119,18 @@ export default function MainWindow({
   const addTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskName.trim()) return;
-    setTasks([...tasks, { 
-      id: Date.now().toString(), 
-      name: newTaskName.trim(), 
-      priority: newTaskPriority,
-      deadline: newTaskDeadline,
-      completed: false 
-    }]);
+    onAddTask(newTaskName.trim(), newTaskPriority, newTaskDeadline);
     setNewTaskName('');
     setNewTaskDeadline('');
   };
 
-  const toggleTask = (id: string) => {
-    setTasks(tasks.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)).filter(t => !t.completed)); // auto delete completed for MVP
+  const toggleTask = async (id: string) => {
+    onToggleTask(id);
   };
 
   const deleteTask = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setTasks(tasks.filter(t => t.id !== id));
+    onDeleteTask(id);
   };
 
   const getPriorityColor = (priority: string) => {
@@ -238,6 +239,19 @@ export default function MainWindow({
             </button>
           );
         })}
+      </div>
+
+      {apiError && (
+        <div className="bg-red-100 border-l-4 border-red-500 p-2 font-mono text-xs text-red-700">
+          ⚠ {apiError}
+        </div>
+      )}
+
+      <div className={`px-2 py-1 text-[10px] font-mono font-bold border-b-[2px] border-black flex items-center gap-1 ${
+        backendConnected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+      }`}>
+        <div className={`w-2 h-2 rounded-full ${backendConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+        {backendConnected ? 'DB CONNECTED' : 'DB DISCONNECTED'}
       </div>
 
       {/* Content Area */}
@@ -582,11 +596,18 @@ export default function MainWindow({
                     </button>
                   ))}
                 </div>
-              </div>
-              <p className="text-xs text-black font-mono font-bold mt-4 text-center pt-4 border-t-2 border-dashed border-gray-300 uppercase">
-                 EMO.OS v1.0.5 <br/>
-                 AI STUDIO SYSTEM
-              </p>
+               </div>
+               <button
+                 type="button"
+                 onClick={downloadLogs}
+                 className="w-full mt-4 py-2 px-3 text-[10px] font-mono font-bold border-[2px] border-black shadow-[2px_2px_0_#000] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] bg-amber-400 text-black hover:bg-amber-300 uppercase leading-tight"
+               >
+                 📥 Download System Logs (.TXT)
+               </button>
+               <p className="text-xs text-black font-mono font-bold mt-4 text-center pt-4 border-t-2 border-dashed border-gray-300 uppercase">
+                  EMO.OS v1.0.5 <br/>
+                  AI STUDIO SYSTEM
+               </p>
               </div>
             </motion.div>
           )}
