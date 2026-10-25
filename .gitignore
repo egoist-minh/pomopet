@@ -1,4 +1,6 @@
 node_modules/
+frontend/out/
+frontend/tsconfig.tsbuildinfo
 dist/
 build/
 *.pyc
