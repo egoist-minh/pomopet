@@ -116,7 +116,7 @@ const addTaskWithApi = async (name: string, priority, deadline: string) => {
   if (!backendConnected) {
     throw new Error('Backend not connected');
   }
-  
+
   try {
     const result = await api.createTask({ name, priority, deadline });
     // Luôn reload, cho dù result là null hay thành công

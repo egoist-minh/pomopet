@@ -15,5 +15,5 @@ __pycache__/
 venv/
 env/
 agents/
-CONTEXT.md
+/CONTEXT.md
 .kilo/

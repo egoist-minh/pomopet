@@ -2,11 +2,11 @@
 
 ## Problem Statement
 
-Users need a desktop Pomodoro app with an AI pet to help maintain focus, track tasks, reduce distractions, and provide motivation via an interactive companion. The current implementation is incomplete: the old Electron/React frontend has been replaced with a Next.js frontend, but backend integration and desktop wrapping are pending.
+Users need a desktop Pomodoro app with an AI pet to help maintain focus, track tasks, reduce distractions, and provide motivation via an interactive companion.
 
 ## Solution
 
-A Next.js frontend that implements the core UI (Pet Widget, Main Window, Desktop Environment) and will later be wrapped with Electron for desktop deployment, while backend services (Python/FastAPI) will handle AI integration, long-term memory (ChromaDB), and data persistence (SQLite). The MVP focuses on frontend-only functionality with simulated backend, to be extended.
+An Electron-wrapped Next.js frontend provides the Pet Widget and Main Window. A local Python/FastAPI backend owns Session and Task state, Statistics, OpenAI chat, and SQLite persistence.
 
 ## User Stories
 
@@ -98,10 +98,10 @@ A Next.js frontend that implements the core UI (Pet Widget, Main Window, Desktop
 
 ### Architecture
 - **Frontend**: Next.js app (app/, components/, hooks/, lib/) — rewritten via AI vibe coding from the original Electron/React codebase
-- **Backend**: Python FastAPI (placeholder), not yet integrated; will handle AI, memory, persistence
-- **Future**: Electron wrapper to bundle Next.js for desktop deployment
+- **Backend**: Python FastAPI services for Session, Task, Statistics, and OpenAI chat
+- **Desktop**: Electron loads the Next.js dev server in development and the static export in production
 - **Data Storage**: SQLite (local) + ChromaDB (long‑term memory)
-- **Communication**: REST API (future) — currently frontend-only with simulated backend
+- **Communication**: REST API at `http://localhost:8000/api`
 
 ### Frontend Modules
 
@@ -116,7 +116,7 @@ A Next.js frontend that implements the core UI (Pet Widget, Main Window, Desktop
 
 **Session Manager**
 - Logic for start/pause/resume/complete/cancel sessions
-- Stores session state in React context
+- Restores active Session state from the backend after reload
 - Interfaces: `startSession(taskId)`, `pauseSession()`, `resumeSession()`, `endSession()`, `cancelSession()`
 
 **Task Manager**
@@ -125,23 +125,23 @@ A Next.js frontend that implements the core UI (Pet Widget, Main Window, Desktop
 
 **Statistics**
 - Computes focus time totals, daily breakdowns, distraction aggregates
-- Queries local SQLite (future)
+- Queries local SQLite through the backend using the user's timezone offset
 
 **Persistence Layer**
-- SQLite wrapper: `getDB()`, `run(query, params)`, `all(query, params)`
+- Async SQLAlchemy over local SQLite with automatic, idempotent schema migration
 
 **Settings**
-- UI to select AI provider and pet name
-- Persist to local storage
+- Pet name stored locally
+- API keys entered in Settings are encrypted by Electron secure storage and held in backend memory; `.env` remains supported
 
-### Backend Modules (Placeholder)
+### Backend Modules
 
 **Backend API (FastAPI)**
-- `main.py` stub with endpoints for session, task, chat, stats
+- FastAPI routes and service layer for Session, Task, chat, logs, and Statistics
 
 **AI Service**
-- Abstraction for OpenAI, Claude, Ollama
-- Interfaces: `generatePrompt(context)`, `callLLM(prompt)`
+- OpenAI and Gemini integration for concise productivity guidance
+- Claude and Ollama remain out of scope for MVP
 
 **Long‑Term Memory**
 - ChromaDB integration for vectors
@@ -170,20 +170,21 @@ completed_at: DateTime (nullable)
 distraction_count: Integer (default 0)
 ```
 
-### API Contracts (Future)
+### API Contracts
 
 - `POST /api/sessions/start` — Body: `{task_id, duration}` → Returns: `{id, message}`
-- `POST /api/sessions/pause` → Returns: `{message}` or `{error}`
-- `POST /api/sessions/resume` → Returns: `{message}` or `{error}`
+- `POST /api/sessions/pause` → Returns: `{message, time_left}`
+- `POST /api/sessions/resume` → Returns: `{message, time_left}`
 - `POST /api/sessions/cancel` → Returns: `{message}`
-- `POST /api/sessions/extend?minutes=X` → Returns: `{message}` or `{error}`
+- `POST /api/sessions/complete` → Returns: `{message, duration}`
+- `POST /api/sessions/extend` — Body: `{minutes}` → Returns: `{message, time_left, duration}`
 - `GET /api/sessions/current` → Returns: `{id, task_id, time_left, state}` or `null`
-- `GET /api/tasks` → Returns: `[{id, name, priority, deadline}]`
-- `POST /api/tasks` — Body: `{name, priority, deadline}` → Returns: `{id, message}`
-- `DELETE /api/tasks/{id}` → Returns: `{message}` or `{error}`
+- `GET /api/tasks` → Returns: `[{id, name, priority, deadline, estimatedDuration}]`
+- `POST /api/tasks` — Body: `{name, priority, deadline, estimated_duration}` → Returns: `{id, message}`
+- `DELETE /api/tasks/{id}` → Returns: `{message}`; missing IDs use HTTP 404
 - `POST /api/tasks/{id}/complete` → Returns: `{message}` (deletes Task)
-- `POST /api/chat` — Body: `{message}` → Returns: `{message: response}`
-- `GET /api/statistics` → Returns: `{focusHoursToday, sessionsCompleted}`
+- `POST /api/chat` — Body: `{message, provider: "openai" | "gemini"}` → Returns: `{message: response}`
+- `GET /api/statistics?timezone_offset=420` → Returns daily/weekly focus and distraction Statistics
 
 ### Pet Emotions & Triggers
 
@@ -203,8 +204,8 @@ distraction_count: Integer (default 0)
 
 ### Configuration
 
-- **Backend**: `.env` file with `OPENAI_API_KEY` (or other AI keys)
-- **Frontend**: No configuration needed for MVP
+- **Backend**: Runtime provider keys from the local UI, with `.env` fallback via `OPENAI_API_KEY` and `GEMINI_API_KEY`
+- **Frontend**: Provider selection and secure API-key entry in Settings
 
 ## Testing Decisions
 
@@ -242,16 +243,16 @@ distraction_count: Integer (default 0)
 
 ### Testing Framework
 
-- **Backend**: pytest with pytest-asyncio for async tests
+- **Backend**: standard-library `unittest` with isolated async test cases
 - **Database**: Use in-memory SQLite (`:memory:`) for test isolation
-- **Frontend**: Jest and React Testing Library (post‑MVP)
-- **Fixtures**: Create pytest fixtures for database session, sample Tasks, sample Sessions
+- **Frontend**: Node's built-in test runner for timer and API regression tests
+- **Fixtures**: Each backend test creates an isolated in-memory database
 
 ### Test Coverage Goals
 
 - **Backend services**: Aim for 80%+ coverage of business logic
 - **API routes**: Test happy paths for MVP, comprehensive error handling post‑MVP
-- **Frontend**: Manual testing for MVP, automated tests post‑MVP
+- **Frontend**: Automated regression tests for timer completion and backend failures
 
 ## Out of Scope
 
@@ -287,20 +288,18 @@ distraction_count: Integer (default 0)
 - Team/collaborative features
 
 ### Technical Debt Accepted for MVP
-- **Polling instead of WebSocket**: Frontend polls `/api/sessions/current` every second instead of real‑time WebSocket updates
+- **Periodic sync instead of WebSocket**: Frontend periodically writes remaining Session time to the backend
 - **Emoji placeholders instead of Lottie animations**: Pet emotions shown as emoji text until Lottie animations are sourced/created
 - **No authentication**: Single‑user app, no login required
 - **No data backup/export**: Users cannot export their data in MVP
-- **No error recovery**: If backend crashes during Session, Session state is lost
 - **No offline mode**: Backend must be running for app to work
-- **Hardcoded backend URL**: Frontend assumes backend is at `http://127.0.0.1:8000`
-- **Frontend only**: No backend integration yet; simulated backend for MVP
+- **Hardcoded backend URL**: Frontend assumes backend is at `http://localhost:8000`
 
 ## Further Notes
 
 ### Development Approach
 - This is a "vibe code" project — maintainer prefers iterative, experimental development
-- Frontend rewritten in Next.js via AI vibe coding; backend pending
+- Frontend and backend are integrated through the local REST API
 - Focus on getting core features working before polish
 - Use free Lottie animations from LottieFiles.com as placeholders for Pet expressions
 - Prioritize backend stability (Python) since maintainer is most comfortable there
