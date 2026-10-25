@@ -1,0 +1,12 @@
+{
+  "name": "pomopet",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix frontend run dev:all",
+    "build": "npm --prefix frontend run build",
+    "package": "npm --prefix frontend run package",
+    "dist": "npm --prefix frontend run dist",
+    "test": "npm --prefix frontend test"
+  }
+}
