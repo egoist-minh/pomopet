@@ -1,14 +1,13 @@
 import logging
-import os
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 from datetime import datetime
 from typing import Optional
 import json
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-LOG_DIR = BASE_DIR / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+from app.runtime_config import get_log_dir
+
+
+LOG_DIR = get_log_dir()
 
 LOG_FILE = LOG_DIR / "app.log"
 ERROR_FILE = LOG_DIR / "error.log"
