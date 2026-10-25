@@ -18,7 +18,10 @@ export default function SetupModal({ onComplete }: SetupModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div
+      data-pomopet-window-region
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+    >
       <motion.div
         initial={{ scale: 0.9, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -51,7 +54,7 @@ export default function SetupModal({ onComplete }: SetupModalProps) {
               autoFocus
             />
           </div>
-          
+
           <button
             type="submit"
             disabled={!name.trim()}

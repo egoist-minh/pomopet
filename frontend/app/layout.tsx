@@ -11,6 +11,9 @@ export const metadata: Metadata = {
   description: 'Floating AI pet with expressive digital eyes',
 };
 
+const productionContentSecurityPolicy =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://localhost:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -18,6 +21,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable} ${space.variable} antialiased`}>
+      <head>
+        {process.env.NODE_ENV === 'production' ? (
+          <meta
+            httpEquiv="Content-Security-Policy"
+            content={productionContentSecurityPolicy}
+          />
+        ) : null}
+      </head>
       <body suppressHydrationWarning className="bg-transparent">{children}</body>
     </html>
   );

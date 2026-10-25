@@ -1,12 +1,15 @@
 'use client';
 
 import { motion, AnimatePresence, useDragControls } from 'motion/react';
-import { X, Minus, MessageSquare, CheckSquare, BarChart2, Settings, Send, Play, Trash2 } from 'lucide-react';
+import { X, Minus, MessageSquare, CheckSquare, BarChart2, Settings, Send } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { Emotion, SessionState } from './FloatingPet';
-import { Task } from '@/lib/api';
+import { AIProvider, AIProviderStatus, BehaviorActionContext, ChatMessageItem, Task } from '@/lib/api';
 import dynamic from 'next/dynamic';
 import { downloadLogs } from '@/lib/logger';
+import PlanPanel from './PlanPanel';
+import RelationshipMemories from './RelationshipMemories';
+import ProactiveTracePanel from './ProactiveTracePanel';
 
 const AreaChart = dynamic(() => import('recharts').then((mod) => mod.AreaChart), { ssr: false });
 const Area = dynamic(() => import('recharts').then((mod) => mod.Area), { ssr: false });
@@ -16,9 +19,8 @@ const CartesianGrid = dynamic(() => import('recharts').then((mod) => mod.Cartesi
 const ResponsiveContainer = dynamic(() => import('recharts').then((mod) => mod.ResponsiveContainer), { ssr: false });
 const Tooltip = dynamic(() => import('recharts').then((mod) => mod.Tooltip), { ssr: false });
 
-export type AIService = 'openai' | 'claude' | 'ollama';
-
 interface MainWindowProps {
+   embedded?: boolean;
    isOpen: boolean;
    onClose: () => void;
    onMinimize: () => void;
@@ -26,31 +28,36 @@ interface MainWindowProps {
    setPetName: (name: string) => void;
    emotion: Emotion;
    setEmotion: (emotion: Emotion) => void;
-   chatMessages: { role: 'user' | 'pet'; text: string }[];
+   chatMessages: ChatMessageItem[];
    onSendMessage: (msg: string) => void;
+   onResolveChatAction: (actionId: string, decision: 'confirm' | 'cancel') => void;
    activeTab: 'chat' | 'tasks' | 'stats' | 'settings';
    setActiveTab: (tab: 'chat' | 'tasks' | 'stats' | 'settings') => void;
    isDesktopMode: boolean;
    setIsDesktopMode: (mode: boolean) => void;
-   tasks: Task[];
-   onAddTask: (name: string, priority: 'high' | 'medium' | 'low', deadline: string) => void;
-   onDeleteTask: (taskId: string) => void;
-   onToggleTask: (taskId: string) => void;
    focusHoursToday: number;
    focusHoursWeek: number;
    sessionsCompleted: number;
-   onStartSession: (task: Task, durationMinutes: number) => void;
+   onStartSession: (task: Task, durationMinutes: number, context?: BehaviorActionContext) => void;
+    onTasksChanged?: () => Promise<void> | void;
+    planRefreshToken?: number;
    sessionState: SessionState;
    distractionChain: number;
    distractionData: { time: string, distractions: number }[];
    onSimulateDistraction: () => void;
-    aiService: AIService;
-    setAiService: (service: AIService) => void;
+   autoDistractionEnabled: boolean;
+   onAutoDistractionEnabledChange: (enabled: boolean) => void;
+   aiProvider: AIProvider;
+   setAiProvider: (provider: AIProvider) => void;
+   configuredProviders: AIProviderStatus;
+   onSaveApiKey: (provider: AIProvider, apiKey: string) => Promise<boolean>;
+   onEvaluateProactiveNow?: () => Promise<boolean>;
     apiError?: string | null;
     backendConnected?: boolean;
  }
 
 export default function MainWindow({
+   embedded = false,
    isOpen,
    onClose,
    onMinimize,
@@ -60,48 +67,42 @@ export default function MainWindow({
    setEmotion,
    chatMessages,
    onSendMessage,
+   onResolveChatAction,
    activeTab,
    setActiveTab,
    isDesktopMode,
    setIsDesktopMode,
-   tasks,
-   onAddTask,
-   onDeleteTask,
-   onToggleTask,
    focusHoursToday,
    focusHoursWeek,
    sessionsCompleted,
    onStartSession,
+    onTasksChanged,
+    planRefreshToken = 0,
    sessionState,
    distractionChain,
    distractionData,
    onSimulateDistraction,
-    aiService,
-    setAiService,
+   autoDistractionEnabled,
+   onAutoDistractionEnabledChange,
+   aiProvider,
+   setAiProvider,
+   configuredProviders,
+   onSaveApiKey,
+   onEvaluateProactiveNow,
     apiError,
     backendConnected = true,
   }: MainWindowProps) {
   const dragControls = useDragControls();
   const [chatInput, setChatInput] = useState('');
-  
-  const [newTaskName, setNewTaskName] = useState('');
-  const [newTaskPriority, setNewTaskPriority] = useState<'high' | 'medium' | 'low'>('medium');
-  const [newTaskDeadline, setNewTaskDeadline] = useState('');
 
-  const [openaiApiKey, setOpenaiApiKey] = useState('');
-  const [claudeApiKey, setClaudeApiKey] = useState('');
-  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
-
-  useEffect(() => {
-    const storedOpenAI = localStorage.getItem('ai_openai_key');
-    const storedClaude = localStorage.getItem('ai_claude_key');
-    const storedOllama = localStorage.getItem('ai_ollama_url');
-    if (storedOpenAI) setOpenaiApiKey(storedOpenAI);
-    if (storedClaude) setClaudeApiKey(storedClaude);
-    if (storedOllama) setOllamaUrl(storedOllama);
-  }, []);
+  const [apiKey, setApiKey] = useState('');
+  const [isSavingApiKey, setIsSavingApiKey] = useState(false);
+  const [apiKeyStatus, setApiKeyStatus] = useState<string | null>(null);
 
   const lastMessageRef = useRef<HTMLDivElement>(null);
+  const hasPendingChatAction = chatMessages.some(
+    message => message.actionStatus === 'pending' || message.actionStatus === 'processing',
+  );
 
   useEffect(() => {
     if (activeTab === 'chat' && lastMessageRef.current) {
@@ -111,88 +112,75 @@ export default function MainWindow({
 
   const handleChatSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() || hasPendingChatAction) return;
     onSendMessage(chatInput.trim());
     setChatInput('');
   };
 
-  const addTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTaskName.trim()) return;
-    onAddTask(newTaskName.trim(), newTaskPriority, newTaskDeadline);
-    setNewTaskName('');
-    setNewTaskDeadline('');
+  const handleUpdateName = (newName: string) => {
+    const finalName = newName.trim();
+    if (finalName === '') {
+      alert('Tên thú cưng không được để trống!');
+      return;
+    }
+    setPetName(finalName);
   };
 
-  const toggleTask = async (id: string) => {
-    onToggleTask(id);
-  };
-
-  const deleteTask = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    onDeleteTask(id);
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'bg-red-400';
-      case 'medium': return 'bg-orange-400';
-      case 'low': return 'bg-green-400';
-      default: return 'bg-gray-400';
+  const handleResetApp = () => {
+    if (window.confirm("Xóa thú cưng và cài đặt lại từ đầu?")) {
+      localStorage.removeItem('petName');
+      window.location.reload();
     }
   };
+
+  const saveProviderKey = async () => {
+    const value = apiKey.trim();
+    if (value.length < 8) return;
+
+    setIsSavingApiKey(true);
+    setApiKeyStatus(null);
+    try {
+      const persisted = await onSaveApiKey(aiProvider, value);
+      setApiKey('');
+      setApiKeyStatus(
+        persisted
+          ? 'KEY SAVED SECURELY.'
+          : 'KEY ACTIVE FOR THIS BACKEND SESSION.',
+      );
+    } catch (error) {
+      console.error('[saveProviderKey] Failed to save API key', error);
+      setApiKeyStatus('FAILED TO SAVE KEY.');
+    } finally {
+      setIsSavingApiKey(false);
+    }
+  };
+
 
   if (!isOpen) return null;
 
   return (
     <motion.div
+      data-pomopet-window-region
       initial={{ opacity: 0, scale: 0.95, y: 20 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 20 }}
-      className="absolute top-24 left-8 sm:left-24 w-full max-w-sm sm:max-w-md bg-white border-[4px] border-black shadow-[8px_8px_0_#000] flex flex-col z-30 pointer-events-auto rounded-xl overflow-hidden"
-      drag
+      className={`${
+        embedded
+          ? 'absolute inset-0'
+          : 'absolute top-24 left-8 sm:left-24 w-full max-w-sm sm:max-w-md rounded-xl shadow-[8px_8px_0_#000]'
+      } bg-white border-[4px] border-black flex flex-col z-30 pointer-events-auto overflow-hidden`}
+      drag={!embedded}
       dragControls={dragControls}
       dragListener={false}
       dragMomentum={false}
-      onDragStart={() => {
-        if (typeof window !== 'undefined') {
-          const win = window as any;
-          if (win.electron && win.electron.setIgnoreMouseEvents) win.electron.setIgnoreMouseEvents(false);
-          else if (win.ipcRenderer) win.ipcRenderer.send('set-ignore-mouse-events', false);
-        }
-      }}
-      onDragEnd={() => {
-        if (typeof window !== 'undefined') {
-          const win = window as any;
-          if (win.electron && win.electron.setIgnoreMouseEvents) win.electron.setIgnoreMouseEvents(true, { forward: true });
-          else if (win.ipcRenderer) win.ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
-        }
-      }}
-      onHoverStart={() => {
-        if (typeof window !== 'undefined') {
-          const win = window as any;
-          if (win.electron && win.electron.setIgnoreMouseEvents) {
-            win.electron.setIgnoreMouseEvents(false);
-          } else if (win.ipcRenderer) {
-            win.ipcRenderer.send('set-ignore-mouse-events', false);
-          }
-        }
-      }}
-      onHoverEnd={() => {
-        if (typeof window !== 'undefined') {
-          const win = window as any;
-          if (win.electron && win.electron.setIgnoreMouseEvents) {
-            win.electron.setIgnoreMouseEvents(true, { forward: true });
-          } else if (win.ipcRenderer) {
-            win.ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
-          }
-        }
-      }}
     >
       {/* Title Bar - Classic Mac OS style */}
-      <div 
+      <div
         className="bg-black p-2 px-3 flex items-center justify-between cursor-move select-none"
-        onPointerDown={(e) => dragControls.start(e)}
+        style={embedded ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined}
+        onPointerDown={(e) => {
+          if (!embedded) dragControls.start(e);
+        }}
       >
         <div className="flex items-center gap-2">
           <div className="w-5 h-5 bg-cyan-400 border-2 border-black flex items-center justify-center">
@@ -203,10 +191,18 @@ export default function MainWindow({
           </h3>
         </div>
         <div className="flex gap-2">
-          <button onClick={onMinimize} className="p-1 bg-white border-2 border-black hover:bg-cyan-400 transition-colors">
+          <button
+            onClick={onMinimize}
+            style={embedded ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
+            className="p-1 bg-white border-2 border-black hover:bg-cyan-400 transition-colors"
+          >
             <Minus className="w-3 h-3 text-black" strokeWidth={3} />
           </button>
-          <button onClick={onClose} className="p-1 bg-white border-2 border-black hover:bg-cyan-400 transition-colors">
+          <button
+            onClick={onClose}
+            style={embedded ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
+            className="p-1 bg-white border-2 border-black hover:bg-cyan-400 transition-colors"
+          >
             <X className="w-3 h-3 text-black" strokeWidth={3} />
           </button>
         </div>
@@ -216,7 +212,7 @@ export default function MainWindow({
       <div className="flex border-b-[4px] border-black bg-white">
         {[
           { id: 'chat', icon: MessageSquare, label: 'Chat' },
-          { id: 'tasks', icon: CheckSquare, label: 'Tasks' },
+          { id: 'tasks', icon: CheckSquare, label: 'Plan' },
           { id: 'stats', icon: BarChart2, label: 'Stats' },
           { id: 'settings', icon: Settings, label: 'Config' },
         ].map((tab) => {
@@ -255,7 +251,7 @@ export default function MainWindow({
       </div>
 
       {/* Content Area */}
-      <div className="h-80 relative bg-gray-100">
+      <div className={`${embedded ? 'flex-1 min-h-0' : 'h-80'} relative bg-gray-100`}>
         <AnimatePresence mode="wait">
           {activeTab === 'chat' && (
             <motion.div
@@ -267,7 +263,7 @@ export default function MainWindow({
             >
               <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3 font-mono text-sm scrollbar-thin scrollbar-thumb-black">
                 {chatMessages.map((m, i) => (
-                  <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div key={m.action?.id || m.proactiveSuggestion?.decisionId || i} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
                     <div
                       className={`max-w-[85%] border-[3px] border-black px-3 py-2 font-bold shadow-[2px_2px_0_#000] ${
                         m.role === 'user'
@@ -278,6 +274,50 @@ export default function MainWindow({
                     >
                       {m.text}
                     </div>
+                    {m.proactiveSuggestion?.target === 'plan' && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('tasks')}
+                        className="mt-2 border-[2px] border-black bg-cyan-400 px-3 py-1 text-[10px] font-black uppercase shadow-[2px_2px_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                      >
+                        Open Plan
+                      </button>
+                    )}
+                    {m.action && (
+                      <div className="mt-2 max-w-[85%] border-[3px] border-black bg-amber-50 px-3 py-2 shadow-[2px_2px_0_#000]">
+                        <div className="text-[10px] uppercase text-amber-700">Confirmation required</div>
+                        <div className="mt-1 whitespace-pre-line text-xs">{m.action.preview}</div>
+                        {(m.actionStatus === 'pending' || m.actionStatus === 'processing') && (
+                          <div className="mt-3 flex gap-2">
+                            <button
+                              type="button"
+                              disabled={m.actionStatus === 'processing'}
+                              onClick={() => onResolveChatAction(m.action!.id, 'confirm')}
+                              className="border-[2px] border-black bg-cyan-400 px-3 py-1 text-[10px] uppercase disabled:opacity-50"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              type="button"
+                              disabled={m.actionStatus === 'processing'}
+                              onClick={() => onResolveChatAction(m.action!.id, 'cancel')}
+                              className="border-[2px] border-black bg-white px-3 py-1 text-[10px] uppercase disabled:opacity-50"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                        {m.actionStatus === 'completed' && (
+                          <div className="mt-2 text-[10px] uppercase text-green-700">Completed</div>
+                        )}
+                        {m.actionStatus === 'cancelled' && (
+                          <div className="mt-2 text-[10px] uppercase text-gray-600">Cancelled</div>
+                        )}
+                        {m.actionStatus === 'error' && (
+                          <div className="mt-2 text-[10px] uppercase text-red-700">Could not complete</div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
                 {emotion === 'thinking' && (
@@ -296,11 +336,12 @@ export default function MainWindow({
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   placeholder={`Chat with ${petName}...`}
+                  disabled={hasPendingChatAction}
                   className="flex-1 bg-white border-[3px] border-black px-3 py-2 text-black font-mono text-xs font-bold outline-none focus:bg-cyan-50 placeholder:text-gray-400"
                 />
                 <button
                   type="submit"
-                  disabled={!chatInput.trim()}
+                  disabled={!chatInput.trim() || hasPendingChatAction}
                   className="bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 disabled:hover:bg-cyan-400 text-black p-2 border-[3px] border-black shadow-[2px_2px_0_#000] active:shadow-none active:translate-y-[2px] active:translate-x-[2px] transition-all"
                 >
                   <Send className="w-4 h-4" strokeWidth={3} />
@@ -315,98 +356,16 @@ export default function MainWindow({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 flex flex-col p-4"
+              className="absolute inset-0"
             >
-              <div className="flex-1 overflow-y-auto flex flex-col gap-3 pr-1 scrollbar-thin scrollbar-thumb-black">
-                {tasks.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-gray-500 text-sm font-mono text-center font-bold px-4">
-                    NO TASKS FOUND. ADD SOME GOALS TO FEED {petName.toUpperCase()}.
-                  </div>
-                ) : (
-                  tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      onClick={() => toggleTask(task.id)}
-                      className="group flex flex-col gap-1 p-3 bg-white border-[3px] border-black shadow-[2px_2px_0_#000] hover:bg-cyan-50 cursor-pointer transition-colors relative"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-5 h-5 border-[3px] border-black flex items-center justify-center transition-colors ${task.completed ? 'bg-cyan-400' : 'bg-white'}`}>
-                          {task.completed && <CheckSquare className="w-4 h-4 text-black" strokeWidth={3} />}
-                        </div>
-                        <span className={`text-sm flex-1 font-mono font-bold transition-all ${task.completed ? 'text-gray-400 line-through' : 'text-black'}`}>
-                          {task.name}
-                        </span>
-                        
-                        {/* Task Actions */}
-                        <div className="flex items-center gap-1">
-                           <button 
-                             onClick={(e) => { e.stopPropagation(); onStartSession(task, 25); }} 
-                             disabled={sessionState !== 'idle' || task.completed}
-                             className="p-1 border-[2px] border-black bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50"
-                             title="Start 25m Session"
-                           >
-                              <Play className="w-3 h-3 text-black" />
-                           </button>
-                           <button 
-                             onClick={(e) => deleteTask(task.id, e)} 
-                             className="p-1 border-[2px] border-black bg-red-400 hover:bg-red-500"
-                             title="Delete"
-                           >
-                              <Trash2 className="w-3 h-3 text-black" />
-                           </button>
-                        </div>
-                      </div>
-                      
-                      {/* Priority & Deadline Badges */}
-                      <div className="pl-8 flex gap-2">
-                        <div className={`px-1.5 py-0.5 text-[10px] font-mono font-black uppercase text-black border-2 border-black ${getPriorityColor(task.priority)}`}>
-                          {task.priority}
-                        </div>
-                        {task.deadline && (
-                           <div className="px-1.5 py-0.5 text-[10px] font-mono font-black text-black border-2 border-black bg-yellow-200">
-                             {task.deadline}
-                           </div>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-              
-              {/* Add Task Form */}
-              <form onSubmit={addTask} className="mt-4 flex flex-col gap-2 bg-white border-[3px] border-black p-2 shadow-[2px_2px_0_#000]">
-                <input
-                  type="text"
-                  value={newTaskName}
-                  onChange={(e) => setNewTaskName(e.target.value)}
-                  placeholder="NEW TASK NAME..."
-                  className="w-full bg-gray-100 border-2 border-black px-2 py-1 text-black font-mono font-bold text-xs outline-none focus:bg-cyan-50 uppercase placeholder:text-gray-400"
-                />
-                <div className="flex gap-2">
-                  <select 
-                    value={newTaskPriority} 
-                    onChange={(e) => setNewTaskPriority(e.target.value as any)}
-                    className="flex-1 bg-gray-100 border-2 border-black px-1 py-1 text-black font-mono font-bold text-[10px] uppercase outline-none"
-                  >
-                    <option value="high">HIGH PRIORITY</option>
-                    <option value="medium">MEDIUM PRIORITY</option>
-                    <option value="low">LOW PRIORITY</option>
-                  </select>
-                  <input
-                    type="date"
-                    value={newTaskDeadline}
-                    onChange={(e) => setNewTaskDeadline(e.target.value)}
-                    className="flex-1 bg-gray-100 border-2 border-black px-1 py-1 text-black font-mono font-bold text-[10px] outline-none"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!newTaskName.trim()}
-                    className="bg-black hover:bg-gray-800 disabled:opacity-50 text-white px-3 py-1 border-2 border-black font-mono text-[10px] font-bold transition-colors"
-                  >
-                    ADD
-                  </button>
-                </div>
-              </form>
+              <PlanPanel
+                petName={petName}
+                sessionState={sessionState}
+                onStartSession={onStartSession}
+                onTasksChanged={onTasksChanged}
+                provider={aiProvider}
+                refreshToken={planRefreshToken}
+              />
             </motion.div>
           )}
 
@@ -426,7 +385,7 @@ export default function MainWindow({
                     {focusHoursToday.toFixed(1)} <span className="text-sm font-black">HR</span>
                   </div>
                   <div className="w-full bg-gray-200 h-3 border-2 border-black overflow-hidden relative">
-                    <motion.div 
+                    <motion.div
                        className="h-full bg-cyan-400 border-r-2 border-black"
                        initial={{ width: 0 }}
                        animate={{ width: `${Math.min((focusHoursToday / 8) * 100, 100)}%` }} // Let's say 8 hours is 100%
@@ -439,7 +398,7 @@ export default function MainWindow({
                     {focusHoursWeek.toFixed(1)} <span className="text-sm font-black">HR</span>
                   </div>
                   <div className="w-full bg-gray-200 h-3 border-2 border-black overflow-hidden relative">
-                    <motion.div 
+                    <motion.div
                        className="h-full bg-cyan-400 border-r-2 border-black"
                        initial={{ width: 0 }}
                        animate={{ width: `${Math.min((focusHoursWeek / 40) * 100, 100)}%` }} // Say 40 hours is full bar
@@ -462,7 +421,7 @@ export default function MainWindow({
                           <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
                           <XAxis dataKey="time" stroke="#000" tick={{ fill: '#000', fontSize: 10, fontFamily: 'monospace' }} interval={0} />
                           <YAxis stroke="#000" tick={{ fill: '#000', fontSize: 10, fontFamily: 'monospace' }} allowDecimals={false} />
-                          <Tooltip 
+                          <Tooltip
                             contentStyle={{ backgroundColor: '#fff', border: '3px solid #000', borderRadius: '8px', boxShadow: '4px 4px 0 #000', fontFamily: 'monospace', fontSize: '12px' }}
                             itemStyle={{ color: '#ef4444', fontWeight: 'bold' }}
                           />
@@ -486,92 +445,126 @@ export default function MainWindow({
             >
               <div className="flex flex-col gap-6 min-h-max pb-4">
                 <div className="space-y-4">
-                  <div className="space-y-2">
+                <div className="space-y-2">
                   <label className="text-black text-xs font-mono font-bold uppercase">Pet Name</label>
                   <div className="flex gap-2">
                       <input
                         type="text"
                         value={petName}
-                        onChange={(e) => setPetName(e.target.value)}
+                        onChange={(e) => {
+                          setPetName(e.target.value);
+                        }}
+                        onBlur={(e) => {
+                          const finalName = e.target.value.trim();
+                          if (finalName === '') {
+                            const oldName = localStorage.getItem('petName') || 'Pomo';
+                            setPetName(oldName);
+                            alert('Tên thú cưng không được để trống!');
+                          } else {
+                            handleUpdateName(finalName);
+                          }
+                        }}
                         className="flex-1 bg-white border-[3px] border-black px-3 py-2 text-black font-mono font-bold text-sm outline-none focus:bg-cyan-50 uppercase"
                       />
                   </div>
                 </div>
-                
+
+                <div className="space-y-2">
+                    <button onClick={handleResetApp} className="w-full bg-red-500 text-white font-mono font-bold py-2 border-[3px] border-black hover:bg-red-600">
+                        RESET APP
+                    </button>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-black text-xs font-mono font-bold uppercase">AI Service</label>
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {([
-                      { id: 'openai', label: 'OpenAI', icon: '⚡' },
-                      { id: 'claude', label: 'Claude', icon: '🧠' },
-                      { id: 'ollama', label: 'Ollama', icon: '🦙' },
-                    ] as const).map((service) => (
+                      { id: 'openai', label: '⚡ OpenAI' },
+                      { id: 'gemini', label: '✦ Gemini' },
+                    ] as const).map((provider) => (
                       <button
-                        key={service.id}
+                        key={provider.id}
+                        type="button"
                         onClick={() => {
-                          setAiService(service.id);
-                          localStorage.setItem('ai_service', service.id);
+                          setAiProvider(provider.id);
+                          setApiKey('');
+                          setApiKeyStatus(null);
                         }}
-                        className={`flex-1 py-3 px-2 text-xs font-mono font-bold uppercase border-[3px] border-black shadow-[2px_2px_0_#000] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] transition-all ${
-                          aiService === service.id
-                            ? 'bg-cyan-400 text-black'
-                            : 'bg-white text-black hover:bg-gray-100'
+                        className={`border-[3px] border-black px-3 py-2 font-mono text-xs font-black uppercase shadow-[2px_2px_0_#000] transition-all active:translate-x-[2px] active:translate-y-[2px] active:shadow-none ${
+                          aiProvider === provider.id ? 'bg-cyan-400' : 'bg-white hover:bg-cyan-50'
                         }`}
                       >
-                        {service.icon} {service.label}
+                        {provider.label}
                       </button>
                     ))}
                   </div>
+                  <div className="border-[3px] border-black bg-cyan-50 p-3 font-mono">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-black uppercase">
+                        {aiProvider === 'gemini' ? 'Gemini API Key' : 'OpenAI API Key'}
+                      </span>
+                      <span className={`text-[9px] font-black ${configuredProviders[aiProvider] ? 'text-green-700' : 'text-gray-500'}`}>
+                        {configuredProviders[aiProvider] ? '● CONFIGURED' : '○ NOT SET'}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        value={apiKey}
+                        onChange={(event) => setApiKey(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            void saveProviderKey();
+                          }
+                        }}
+                        minLength={8}
+                        autoComplete="off"
+                        placeholder="PASTE KEY..."
+                        className="min-w-0 flex-1 border-2 border-black bg-white px-2 py-1.5 text-xs font-bold outline-none focus:bg-cyan-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void saveProviderKey()}
+                        disabled={apiKey.trim().length < 8 || isSavingApiKey}
+                        className="border-2 border-black bg-black px-3 py-1.5 text-[10px] font-black text-white disabled:opacity-40"
+                      >
+                        {isSavingApiKey ? 'SAVING' : 'SAVE'}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-[9px] text-gray-600">
+                      Electron encrypts keys with the OS secure store. Browser dev keeps them in backend memory only.
+                    </p>
+                    {apiKeyStatus && (
+                      <p className="mt-1 text-[9px] font-black text-cyan-700">{apiKeyStatus}</p>
+                    )}
+                  </div>
                 </div>
 
-                {aiService === 'openai' && (
-                  <div className="space-y-2">
-                    <label className="text-black text-xs font-mono font-bold uppercase">OpenAI API Key</label>
-                    <input
-                      type="password"
-                      value={openaiApiKey}
-                      onChange={(e) => setOpenaiApiKey(e.target.value)}
-                      onBlur={() => localStorage.setItem('ai_openai_key', openaiApiKey)}
-                      placeholder="sk-..."
-                      className="w-full bg-white border-[3px] border-black px-3 py-2 text-black font-mono font-bold text-sm outline-none focus:bg-cyan-50"
-                    />
-                    <p className="text-[10px] text-gray-500 font-mono">Get your API key from platform.openai.com</p>
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <label className="text-black text-xs font-mono font-bold uppercase block">Automatic Distraction Tracking</label>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={autoDistractionEnabled}
+                    onClick={() => onAutoDistractionEnabledChange(!autoDistractionEnabled)}
+                    className={`w-full border-[3px] border-black py-2 font-mono font-black shadow-[2px_2px_0_#000] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none transition-all ${
+                      autoDistractionEnabled ? 'bg-green-400 text-black' : 'bg-gray-300 text-gray-700'
+                    }`}
+                  >
+                    {autoDistractionEnabled ? 'AUTO TRACKING: ON' : 'AUTO TRACKING: OFF'}
+                  </button>
+                  <p className="text-[9px] font-mono text-gray-600">
+                    Detects distracting apps after 10 seconds and idle time after 60 seconds. Window titles are never stored.
+                  </p>
+                </div>
 
-                {aiService === 'claude' && (
-                  <div className="space-y-2">
-                    <label className="text-black text-xs font-mono font-bold uppercase">Claude API Key</label>
-                    <input
-                      type="password"
-                      value={claudeApiKey}
-                      onChange={(e) => setClaudeApiKey(e.target.value)}
-                      onBlur={() => localStorage.setItem('ai_claude_key', claudeApiKey)}
-                      placeholder="sk-ant-..."
-                      className="w-full bg-white border-[3px] border-black px-3 py-2 text-black font-mono font-bold text-sm outline-none focus:bg-cyan-50"
-                    />
-                    <p className="text-[10px] text-gray-500 font-mono">Get your API key from console.anthropic.com</p>
-                  </div>
-                )}
+                <RelationshipMemories />
+                <ProactiveTracePanel onEvaluateNow={onEvaluateProactiveNow} />
 
-                {aiService === 'ollama' && (
-                  <div className="space-y-2">
-                    <label className="text-black text-xs font-mono font-bold uppercase">Ollama URL</label>
-                    <input
-                      type="text"
-                      value={ollamaUrl}
-                      onChange={(e) => setOllamaUrl(e.target.value)}
-                      onBlur={() => localStorage.setItem('ai_ollama_url', ollamaUrl)}
-                      placeholder="http://localhost:11434"
-                      className="w-full bg-white border-[3px] border-black px-3 py-2 text-black font-mono font-bold text-sm outline-none focus:bg-cyan-50"
-                    />
-                    <p className="text-[10px] text-gray-500 font-mono">URL where Ollama is running</p>
-                  </div>
-                )}
-                
                 <div className="space-y-2">
                   <label className="text-black text-xs font-mono font-bold uppercase block">Simulate Distraction</label>
-                  <button 
+                  <button
                      onClick={onSimulateDistraction}
                      className="w-full bg-red-400 hover:bg-red-500 text-white font-mono font-bold border-[3px] border-black py-2 shadow-[2px_2px_0_#000] active:translate-y-[2px] active:translate-x-[2px] active:shadow-none transition-all"
                    >
@@ -587,8 +580,8 @@ export default function MainWindow({
                       key={e}
                       onClick={() => setEmotion(e)}
                       className={`py-2 px-1 text-xs font-mono font-bold transition-all capitalize border-[2px] border-black shadow-[2px_2px_0_#000] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] ${
-                        emotion === e 
-                          ? 'bg-cyan-400 text-black' 
+                        emotion === e
+                          ? 'bg-cyan-400 text-black'
                           : 'bg-white text-black hover:bg-gray-100'
                       }`}
                     >
