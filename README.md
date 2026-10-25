@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🍅 PomoPet
+<h1><img src="./frontend/electron/assets/pomopet-logo.png" alt="PomoPet logo" width="44" align="center" /> PomoPet</h1>
 
 ### A tiny AI focus companion that lives on your desktop
 
@@ -10,7 +10,7 @@ Plan what matters, run focused sessions, and build better work habits with a pet
 [![Latest release](https://img.shields.io/github/v/release/egoist-minh/pomopet?style=for-the-badge&label=release&color=22C55E)](https://github.com/egoist-minh/pomopet/releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D4?style=for-the-badge&logo=windows)](#download)
 
-[Download](#download) · [Features](#why-pomopet) · [Run locally](#run-locally) · [Roadmap](#roadmap)
+[Download](#download) · [Feature highlights](#-feature-highlights) · [Build from source](#build-from-source) · [Roadmap](#roadmap)
 
 </div>
 
@@ -21,13 +21,20 @@ Plan what matters, run focused sessions, and build better work habits with a pet
 
 Most Pomodoro apps disappear into a browser tab. PomoPet keeps a small, draggable companion on top of your windows so your current task and remaining time stay visible without taking over your screen.
 
-- **A desktop pet, not another dashboard** — an always-on-top widget reacts to focus, breaks, completions, and interruptions.
-- **Focus sessions that stay flexible** — start, pause, resume, cancel, or extend a session when you are in flow.
-- **Planning from today to the bigger picture** — organize an inbox, daily tasks, weekly outcomes, monthly milestones, and goals.
-- **AI that asks before it acts** — chat with Pomo, generate a plan draft, review it, then approve or change it.
-- **A companion that learns carefully** — optional preferences, habits, rituals, and relevant moments make suggestions more personal.
-- **Local-first productivity data** — tasks, sessions, plans, statistics, and memories live in SQLite on your computer.
-- **Your choice of AI** — bring your own OpenAI or Gemini API key; keys entered in the desktop app are protected by the operating system's secure storage.
+## ✨ Feature highlights
+
+| | Feature | What it gives you |
+| --- | --- | --- |
+| 🐾 | **Living desktop companion** | A draggable, always-on-top pet with expressions, ambient behavior, quick actions, and a timer that stays in sight. |
+| 🍅 | **Flexible focus sessions** | Start from a task, then pause, resume, cancel, extend, or take a break without losing your session state. |
+| 🗓️ | **Goal-to-today planning** | Turn goals into monthly milestones, weekly outcomes, and daily focus items while keeping loose ideas in an inbox. |
+| ✨ | **AI-assisted planning** | Ask Pomo to break down a goal, review the generated draft, edit it, and approve it only when it looks right. |
+| 💬 | **Actionable AI chat** | Chat with Pomo for concise productivity help; any proposed task or plan change waits for your confirmation. |
+| 🧠 | **Careful personalization** | Optional preferences, habit signals, rituals, and relevant moments help Pomo suggest better tasks and session lengths. |
+| 💡 | **Proactive nudges** | Receive bounded reminders, planning suggestions, encouragement, and lightweight companion moments when they are useful. |
+| 📊 | **Focus and distraction insights** | See daily and weekly focus progress, completed sessions, distraction patterns, and your current distraction chain. |
+| 🔒 | **Local-first privacy controls** | Keep productivity data in local SQLite and inspect, edit, suppress, disable, or delete what Pomo remembers. |
+| ⚡ | **OpenAI or Gemini** | Bring your preferred provider and protect desktop-entered API keys with the operating system's secure storage. |
 
 ## Download
 
@@ -35,7 +42,7 @@ PomoPet currently targets **Windows 10/11**.
 
 The installer will be available on the [GitHub Releases page](https://github.com/egoist-minh/pomopet/releases) with the first public release. The packaged app includes its backend, so end users do not need Python or Node.js.
 
-Want to try it before then? Follow the development setup below and tell us what feels delightful — or what gets in the way — in [GitHub Issues](https://github.com/egoist-minh/pomopet/issues).
+Want to try it before then? Follow the build-from-source guide below and tell us what feels delightful — or what gets in the way — in [GitHub Issues](https://github.com/egoist-minh/pomopet/issues).
 
 ## How it works
 
@@ -48,7 +55,7 @@ flowchart LR
 
 PomoPet runs as an Electron desktop app with a bundled FastAPI sidecar. The sidecar binds to a free loopback port and accepts authenticated requests from the app. Your productivity history remains local; when an AI feature is used, only the context needed for that request is sent to the provider you selected.
 
-## Run locally
+## Build from source
 
 ### Prerequisites
 

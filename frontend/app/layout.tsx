@@ -7,8 +7,8 @@ const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mon
 const space = Space_Grotesk({ subsets: ['latin'], variable: '--font-space' });
 
 export const metadata: Metadata = {
-  title: 'AI Desktop Pet',
-  description: 'Floating AI pet with expressive digital eyes',
+  title: 'PomoPet — AI Focus Companion',
+  description: 'A tiny AI focus companion that lives on your desktop',
 };
 
 const productionContentSecurityPolicy =

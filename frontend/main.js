@@ -455,6 +455,7 @@ function createWindows() {
   const display = screen.getPrimaryDisplay();
   const petWidth = 520;
   const petHeight = 420;
+  const appIcon = path.join(__dirname, 'electron', 'assets', 'pomopet-logo.png');
   petChaseSuspendedByRenderer = false;
   petChaseSuspendedByDrag = false;
   ignorePetMoveUntil = 0;
@@ -468,6 +469,7 @@ function createWindows() {
     frame: false,
     skipTaskbar: false,
     resizable: true,
+    icon: appIcon,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -757,6 +759,7 @@ ipcMain.handle('api-key:set', async (event, provider, apiKey) => {
 
 app.whenReady().then(async () => {
   try {
+    app.setAppUserModelId('com.pomopet.desktop');
     registerStaticProtocol();
     if (isDev) {
       runtimeConfig = getDevelopmentRuntimeConfig();
