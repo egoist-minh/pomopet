@@ -179,7 +179,7 @@ OpenAI, Gemini, and Groq have their own data-handling policies. When you use an 
 
 ## License
 
-A license has not been selected yet. Until one is added, the source code remains copyright-protected and is not licensed for redistribution or reuse.
+PomoPet is available under the [MIT License](./LICENSE).
 
 ---
 
